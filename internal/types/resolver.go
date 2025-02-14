@@ -5,6 +5,7 @@
 package types
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"unicode"
 
 	"wa-lang.org/wa/internal/ast"
+	"wa-lang.org/wa/internal/ast/astutil"
 	"wa-lang.org/wa/internal/constant"
 	"wa-lang.org/wa/internal/token"
 )
@@ -52,7 +54,7 @@ func (d *declInfo) addDep(obj Object) {
 // have the appropriate number of names and init exprs. For const
 // decls, init is the value spec providing the init exprs; for
 // var decls, init is nil (the init exprs are in s in this case).
-func (check *Checker) arityMatch(s, init *ast.ValueSpec) {
+func (check *Checker) arityMatch(s, init *ast.ValueSpec, hasEmbed bool) {
 	l := len(s.Names)
 	r := len(s.Values)
 	if init != nil {
@@ -77,8 +79,10 @@ func (check *Checker) arityMatch(s, init *ast.ValueSpec) {
 			// TODO(gri) avoid declared but not used error here
 		}
 	case l > r && (init != nil || r != 1):
-		n := s.Names[r]
-		check.errorf(n.Pos(), "missing init expr for %s", n)
+		if !hasEmbed {
+			n := s.Names[r]
+			check.errorf(n.Pos(), "missing init expr for %s", n)
+		}
 	}
 }
 
@@ -145,10 +149,7 @@ func (check *Checker) importPackage(pos token.Pos, path, dir string) *Package {
 	}
 
 	// no package yet => import it
-	if path == "C" && check.conf.FakeImportC {
-		imp = NewPackage("C", "C")
-		imp.fake = true
-	} else {
+	{
 		// ordinary import
 		var err error
 		if importer := check.conf.Importer; importer == nil {
@@ -326,6 +327,12 @@ func (check *Checker) collectObjects() {
 					case *ast.ValueSpec:
 						switch d.Tok {
 						case token.CONST:
+							hasEmbed := false
+							if len(s.Names) == 1 {
+								info := astutil.ParseCommentInfo(d.Doc)
+								hasEmbed = info.Embed != ""
+							}
+
 							// determine which initialization expressions to use
 							switch {
 							case s.Type != nil || len(s.Values) > 0:
@@ -354,7 +361,7 @@ func (check *Checker) collectObjects() {
 								check.declarePkgObj(name, obj, d)
 							}
 
-							check.arityMatch(s, last)
+							check.arityMatch(s, last, hasEmbed)
 
 						case token.VAR, token.GLOBAL:
 							lhs := make([]*Var, len(s.Names))
@@ -395,7 +402,7 @@ func (check *Checker) collectObjects() {
 								check.declarePkgObj(name, obj, d)
 							}
 
-							check.arityMatch(s, nil)
+							check.arityMatch(s, nil, false)
 
 						default:
 							check.invalidAST(s.Pos(), "invalid token %s", d.Tok)
@@ -404,7 +411,7 @@ func (check *Checker) collectObjects() {
 					case *ast.TypeSpec:
 						obj := NewTypeName(s.Name.Pos(), pkg, s.Name.Name, nil)
 						obj.setNode(s)
-						check.declarePkgObj(s.Name, obj, &declInfo{file: fileScope, typ: s.Type, alias: s.Assign.IsValid()})
+						check.declarePkgObj(s.Name, obj, &declInfo{file: fileScope, typ: s.Type, alias: false})
 
 						if s.Doc == nil {
 							if d.Lparen == token.NoPos && d.Doc != nil {
@@ -494,6 +501,183 @@ func (check *Checker) collectObjects() {
 			}
 		}
 	}
+}
+
+func (check *Checker) lookupMethodFunc(recvTypeName, methodName string) *Func {
+	for obj := range check.objMap {
+		if fn, ok := obj.(*Func); ok {
+			if obj.Parent() != nil {
+				continue
+			}
+			if fn.RecvTypeName() != recvTypeName {
+				continue
+			}
+			if fn.name == methodName {
+				return fn
+			}
+		}
+	}
+	return nil
+}
+
+// 预处理函数重载
+func (check *Checker) processGenericFuncs() {
+	if check.conf.DisableGeneric {
+		return
+	}
+
+	for obj := range check.objMap {
+		if fn, ok := obj.(*Func); ok {
+			assert(fn.generic == nil)
+			if info := astutil.ParseCommentInfo(fn.NodeDoc()); len(info.Generic) != 0 {
+				// method
+				if obj.Parent() == nil {
+					fnNode, _ := fn.node.(*ast.FuncDecl)
+					assert(fnNode != nil)
+					assert(fnNode.Recv != nil)
+					recvTypeName := fn.RecvTypeName()
+					for _, name := range info.Generic {
+						if xFn := check.lookupMethodFunc(recvTypeName, name); xFn != nil {
+							fn.generic = append(fn.generic, xFn)
+						} else {
+							check.errorf(obj.Pos(), "%s generic %s method not found", obj.Name(), name)
+							continue
+						}
+					}
+					continue
+				}
+
+				// global function
+				for _, name := range info.Generic {
+					xObj := obj.Parent().Lookup(name)
+					if xObj == nil {
+						check.errorf(obj.Pos(), "%s generic %s not found", obj.Name(), name)
+						continue
+					}
+					if xFn, ok := xObj.(*Func); ok {
+						fn.generic = append(fn.generic, xFn)
+					} else {
+						check.errorf(obj.Pos(), "%s generic %s not function", obj.Name(), name)
+						continue
+					}
+				}
+			}
+		}
+	}
+}
+
+func (check *Checker) tryGenericCall(x *operand, fn *Func, e *ast.CallExpr) (err error) {
+	assert(check != nil)
+
+	firstErrBak := check.firstErr
+	check.firstErr = nil
+
+	defer func() { check.firstErr = firstErrBak }()
+
+	defer check.handleBailout(&err)
+
+	defer func(ctxt context, indent int) {
+		check.context = ctxt
+		check.indent = indent
+	}(check.context, check.indent)
+
+	check.context.ignoreFuncLitBody = true
+
+	// check args type, donot panic
+	arg, n, _ := unpack(func(x *operand, i int) { check.multiExpr(x, e.Args[i]) }, len(e.Args), false)
+	if arg == nil {
+		return errors.New("invalid mode")
+	}
+
+	sig, _ := fn.typ.Underlying().(*Signature)
+	check.arguments(x, e, sig, arg, n)
+	return
+}
+
+func (check *Checker) resolveExprOrTypeOrGenericCall(x *operand, e *ast.CallExpr) {
+	switch eCall := e.Fun.(type) {
+	case *ast.Ident: // Fn(arg)
+		_, obj := check.scope.LookupParent(eCall.Name, check.pos)
+		if fnObj, ok := obj.(*Func); ok && len(fnObj.generic) != 0 {
+			for _, genericFnObj := range fnObj.generic {
+				if err := check.tryGenericCall(x, genericFnObj, e); err == nil {
+					eCall.Name = "#{func}:" + genericFnObj.name
+					check.exprOrType(x, e.Fun)
+					return
+				}
+			}
+		}
+
+	case *ast.SelectorExpr: // x.FuncOrMethod(arg)
+		if xIdent, ok := eCall.X.(*ast.Ident); ok {
+			_, obj := check.scope.LookupParent(xIdent.Name, check.pos)
+			switch obj := obj.(type) {
+			case *PkgName: // pkg.Func(arg)
+				pname := obj
+				assert(pname.pkg == check.pkg)
+				exp := pname.Imported().scope.Lookup(eCall.Sel.Name)
+				if fnObj, ok := exp.(*Func); ok && len(fnObj.generic) != 0 {
+					for _, genericFnObj := range fnObj.generic {
+						if err := check.tryGenericCall(x, genericFnObj, e); err == nil {
+							eCall.Sel.Name = genericFnObj.name
+							check.exprOrType(x, e.Fun)
+							return
+						}
+					}
+				}
+
+			case *Var: // this.Method(arg)
+				varTyp := obj.Type()
+				if t, _ := obj.Type().(*Pointer); t != nil {
+					varTyp = t.base
+				}
+				if t, _ := varTyp.(*Named); t != nil {
+					obj, _, _ := lookupFieldOrMethod(t, true, check.pkg, eCall.Sel.Name)
+					if fnObj, ok := obj.(*Func); ok && len(fnObj.generic) != 0 {
+						for _, genericFnObj := range fnObj.generic {
+							if err := check.tryGenericCall(x, genericFnObj, e); err == nil {
+								eCall.Sel.Name = genericFnObj.name
+								check.exprOrType(x, e.Fun)
+								return
+							}
+						}
+					}
+				}
+			}
+		} else {
+			// eCall.X 是普通的 Expr 类型
+			// 作为普通的 Expr, 解析其类型(已经check过没有错误)
+			var thisType Type = nil
+			{
+				var xOperand operand
+				check.rawExpr(&xOperand, eCall.X, nil)
+				if xOperand.mode == value {
+					// 返回值必须可取地址, 才可能链式调用方法
+					if t, ok := xOperand.typ.(*Pointer); ok {
+						thisType = t.Elem()
+					}
+				}
+			}
+
+			// 返回值必须是指针类型, 才能链式调用
+			if thisType != nil {
+				if t, _ := thisType.(*Named); t != nil {
+					obj, _, _ := lookupFieldOrMethod(t, true, check.pkg, eCall.Sel.Name)
+					if fnObj, ok := obj.(*Func); ok && len(fnObj.generic) != 0 {
+						for _, genericFnObj := range fnObj.generic {
+							if err := check.tryGenericCall(x, genericFnObj, e); err == nil {
+								eCall.Sel.Name = genericFnObj.name
+								check.exprOrType(x, e.Fun)
+								return
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	check.exprOrType(x, e.Fun)
 }
 
 // resolveBaseTypeName returns the non-alias base type name for typ, and whether

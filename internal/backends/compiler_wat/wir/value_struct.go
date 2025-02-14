@@ -110,7 +110,7 @@ func (t *Struct) genRawFree() (ret []fn_offset_pair) {
 				ret = append(ret, fn_offset_pair{fn: rf.fn, offset: rf.offset + member._start})
 			}
 		} else {
-			mff := member_type.onFree()
+			mff := member_type.OnFree()
 			if mff != 0 {
 				ret = append(ret, fn_offset_pair{fn: mff, offset: member._start})
 			}
@@ -120,9 +120,9 @@ func (t *Struct) genRawFree() (ret []fn_offset_pair) {
 	return
 }
 
-func (t *Struct) onFree() int {
+func (t *Struct) OnFree() int {
 	var f Function
-	f.InternalName = "$" + GenSymbolName(t.Named()) + ".$$onFree"
+	f.InternalName = "$" + GenSymbolName(t.Named()) + ".$$OnFree"
 
 	if i := currentModule.findTableElem(f.InternalName); i != 0 {
 		return i
@@ -143,7 +143,7 @@ func (t *Struct) onFree() int {
 		}
 
 		f.Insts = append(f.Insts, wat.NewInstConst(wat.U32{}, strconv.Itoa(rf.fn)))
-		f.Insts = append(f.Insts, wat.NewInstCallIndirect("$onFree"))
+		f.Insts = append(f.Insts, wat.NewInstCallIndirect("$OnFree"))
 	}
 	currentModule.AddFunc(&f)
 	return currentModule.AddTableElem(f.InternalName)
@@ -180,6 +180,14 @@ func (t *Struct) EmitLoadFromAddr(addr Value, offset int) (insts []wat.Inst) {
 	for _, m := range t.fields {
 		ptr := newValue_Ptr(addr.Name(), addr.Kind(), m._typ_ptr)
 		insts = append(insts, m.Type().EmitLoadFromAddr(ptr, m._start+offset)...)
+	}
+	return
+}
+
+func (t *Struct) EmitLoadFromAddrNoRetain(addr Value, offset int) (insts []wat.Inst) {
+	for _, m := range t.fields {
+		ptr := newValue_Ptr(addr.Name(), addr.Kind(), m._typ_ptr)
+		insts = append(insts, m.Type().EmitLoadFromAddrNoRetain(ptr, m._start+offset)...)
 	}
 	return
 }
@@ -351,5 +359,31 @@ func (v *aStruct) emitEq(r Value) (insts []wat.Inst, ok bool) {
 
 	ok = true
 
+	return
+}
+
+func (v *aStruct) emitCompare(r Value) (insts []wat.Inst) {
+	if !v.typ.Equal(r.Type()) {
+		logger.Fatal("v.Type() != r.Type()")
+	}
+
+	block := wat.NewInstBlock("")
+	block.Ret = append(block.Ret, wat.I32{})
+
+	d := r.(*aStruct)
+	for i := range v.typ.fields {
+		t1 := v.genSubValue(v.typ.fields[i])
+		t2 := d.genSubValue(d.typ.fields[i])
+
+		if i > 0 {
+			block.Insts = append(block.Insts, wat.NewInstCall("runtime.DupI32"))
+			block.Insts = append(block.Insts, wat.NewInstBrIf(0))
+			block.Insts = append(block.Insts, wat.NewInstDrop())
+		}
+
+		block.Insts = append(block.Insts, t1.emitCompare(t2)...)
+	}
+
+	insts = append(insts, block)
 	return
 }

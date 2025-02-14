@@ -1,19 +1,18 @@
 package wazero
 
 import (
-	"wa-lang.org/wa/internal/config"
-	"wa-lang.org/wazero/sys"
+	"wa-lang.org/wa/internal/3rdparty/wazero/sys"
 )
 
 // 单次执行 wasm
-func RunWasm(cfg *config.Config, wasmName string, wasmBytes []byte, wasmArgs ...string) (stdout, stderr []byte, err error) {
-	m, err := BuildModule(cfg, wasmName, wasmBytes, wasmArgs...)
+func RunWasm(wasmName string, wasmBytes []byte, mainFunc string, wasmArgs ...string) (stdout, stderr []byte, err error) {
+	m, err := BuildModule(wasmName, wasmBytes, wasmArgs...)
 	if err != nil {
 		return
 	}
 	defer m.Close()
 
-	return m.RunMain()
+	return m.RunMain(mainFunc)
 }
 
 func AsExitError(err error) (exitCode int, ok bool) {

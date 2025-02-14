@@ -72,15 +72,16 @@ func LoadProgramVFS(vfs *config.PkgVFS, cfg *config.Config, pkgPath string) (*Pr
 }
 
 // 构建 wat 目标
-func BuildFile(cfg *config.Config, filename string, src interface{}) (wat []byte, err error) {
+func BuildFile(cfg *config.Config, filename string, src interface{}) (mainFunc string, wat []byte, err error) {
 	prog, err := LoadProgramFile(cfg, filename, src)
 	if err != nil || prog == nil {
-		logger.Tracef(&config.EnableTrace_api, "LoadProgramVFS failed, err = %v", err)
-		return nil, err
+		logger.Tracef(&config.EnableTrace_api, "LoadProgramFile failed, err = %v", err)
+		return "", nil, err
 	}
 
-	watOut, err := compiler_wat.New().Compile(prog, "main")
-	return []byte(watOut), err
+	mainFunc = prog.Manifest.MainPkg + ".main"
+	watOut, err := compiler_wat.New().Compile(prog)
+	return mainFunc, []byte(watOut), err
 }
 
 // 构建 wat 目标
@@ -91,7 +92,7 @@ func BuildVFS(cfg *config.Config, vfs *config.PkgVFS, appPkg string) (wat []byte
 		return nil, err
 	}
 
-	watOut, err := compiler_wat.New().Compile(prog, "main")
+	watOut, err := compiler_wat.New().Compile(prog)
 	return []byte(watOut), err
 }
 

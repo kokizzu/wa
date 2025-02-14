@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"wa-lang.org/wa/api"
-	"wa-lang.org/wa/internal/wabt"
+	"wa-lang.org/wa/internal/wat/watutil"
 	"wa-lang.org/wa/internal/wazero"
 )
 
@@ -18,22 +18,20 @@ func main {
 	println("hello wazero")
 }
 
-func add(a:i32, b:i32) => i32 {
+func Add(a:i32, b:i32) => i32 {
 	return a+b
 }
 `
 	wasmBytes := tBuildWasm(t, waCode)
 
-	m, err := wazero.BuildModule(
-		api.DefaultConfig(), wasmName, wasmBytes,
-	)
+	m, err := wazero.BuildModule(wasmName, wasmBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer m.Close()
 
 	// main 执行
-	stdout, _, err := m.RunMain()
+	stdout, _, err := m.RunMain("__main__.main")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +40,7 @@ func add(a:i32, b:i32) => i32 {
 	}
 
 	// add 函数执行
-	result, _, _, err := m.RunFunc("__main__.add", 1, 2)
+	result, _, _, err := m.RunFunc("__main__.Add", 1, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,11 +50,11 @@ func add(a:i32, b:i32) => i32 {
 }
 
 func tBuildWasm(t *testing.T, waCode string) []byte {
-	watBytes, err := api.BuildFile(api.DefaultConfig(), "main.wa", waCode)
+	_, watBytes, err := api.BuildFile(api.DefaultConfig(), "main.wa", waCode)
 	if err != nil {
 		t.Fatal(err)
 	}
-	wasmBytes, err := wabt.Wat2Wasm(watBytes)
+	wasmBytes, err := watutil.Wat2Wasm("a.out.wat", watBytes)
 	if err != nil {
 		t.Fatal(err)
 	}

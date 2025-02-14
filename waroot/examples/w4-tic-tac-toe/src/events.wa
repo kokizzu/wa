@@ -1,0 +1,24 @@
+import "syscall/wasm4"
+
+type w4State :struct {
+	palette:      u32
+	drawColors:   u16
+	gamepad1:     u8
+	mouseX:       int
+	mouseY:       int
+	mouseButtons: u32
+}
+
+global state = w4State{
+	gamepad1:     wasm4.GetGamePad1(),
+	mouseX:       wasm4.GetMouseX(),
+	mouseY:       wasm4.GetMouseY(),
+	mouseButtons: u32(wasm4.GetMouseButtons()),
+}
+
+func JustPressedGamepad1 => byte {
+	gamepad := wasm4.GetGamePad1()
+	result := gamepad & (gamepad ^ state.gamepad1)
+	state.gamepad1 = gamepad
+	return result
+}

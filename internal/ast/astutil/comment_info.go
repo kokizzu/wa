@@ -13,16 +13,20 @@ type CommentInfo struct {
 	BuildIgnore bool     // #wa:build ignore
 	BuildTags   []string // #wa:build s1 s2 ...
 
-	Inline        bool      // #wa:inline
-	Nobounds      bool      // #wa:nobounds
-	LinkName      string    // #wa:linkname xxx
-	ExportName    string    // #wa:export xxx
-	ImportName    [2]string // #wa:import xxx yyy
-	ForceRegister bool      // #wa:force_register
-	RuntimeGetter bool      // #wa:runtime_getter
-	RuntimeSetter bool      // #wa:runtime_setter
-	RuntimeSizer  bool      // #wa:runtime_sizer
-	WasmModule    string    // #wa:wasm-module xxx
+	NeesConstructor bool       // #wa:need-constructor
+	Inline          bool       // #wa:inline
+	Nobounds        bool       // #wa:nobounds
+	LinkName        string     // #wa:linkname xxx
+	ExportName      string     // #wa:export xxx
+	ImportName      [2]string  // #wa:import xxx yyy
+	ForceRegister   bool       // #wa:force_register
+	RuntimeGetter   bool       // #wa:runtime_getter
+	RuntimeSetter   bool       // #wa:runtime_setter
+	RuntimeSizer    bool       // #wa:runtime_sizer
+	WasmModule      string     // #wa:wasm-module xxx
+	Generic         []string   // #wa:generic xxx yyy
+	Operator        [][]string // #wa:operator + xxx yyy
+	Embed           string     // #wa:embed filename
 }
 
 // 获取节点关联文档
@@ -63,13 +67,15 @@ func ParseCommentInfo(docList ...*ast.CommentGroup) (info CommentInfo) {
 					info.BuildIgnore = parts[1] == "ignore"
 				}
 				info.BuildTags = parts[1:]
+			case "#wa:need-constructor", "//wa:need-constructor":
+				info.NeesConstructor = true
 			case "#wa:inline", "//wa:inline":
 				info.Inline = true
 			case "#wa:nobounds", "//wa:nobounds":
 				info.Nobounds = true
 			case "#wa:linkname", "//wa:linkname":
 				if len(parts) >= 2 {
-					info.LinkName = parts[1]
+					info.LinkName = strings.Join(parts[1:], " ")
 				}
 			case "#wa:export", "//wa:export":
 				if len(parts) >= 2 {
@@ -92,6 +98,16 @@ func ParseCommentInfo(docList ...*ast.CommentGroup) (info CommentInfo) {
 			case "#wa:wasm-module", "//wa:wasm-module":
 				if len(parts) >= 2 {
 					info.WasmModule = parts[1]
+				}
+
+			case "#wa:generic":
+				info.Generic = append(info.Generic, parts[1:]...)
+			case "#wa:operator":
+				info.Operator = append(info.Operator, parts[1:])
+
+			case "#wa:embed":
+				if len(parts) >= 2 {
+					info.Embed = parts[1]
 				}
 			}
 		}

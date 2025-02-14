@@ -76,8 +76,13 @@ func (m *Module) EmitBinOp(x, y Value, op wat.OpCode) (insts []wat.Inst, ret_typ
 		ret_type = x.Type()
 		insts = append(insts, x.EmitPushNoRetain()...)
 		insts = append(insts, y.EmitPushNoRetain()...)
+
 		if ret_type.Equal(m.STRING) {
 			insts = append(insts, wat.NewInstCall(m.STRING.(*String).fnName_append))
+		} else if ret_type.Equal(m.COMPLEX64) {
+			insts = append(insts, m.COMPLEX64.(*Complex64).emitAdd()...)
+		} else if ret_type.Equal(m.COMPLEX128) {
+			insts = append(insts, m.COMPLEX128.(*Complex128).emitAdd()...)
 		} else {
 			insts = append(insts, wat.NewInstAdd(toWatType(ret_type)))
 		}
@@ -94,7 +99,14 @@ func (m *Module) EmitBinOp(x, y Value, op wat.OpCode) (insts []wat.Inst, ret_typ
 		ret_type = x.Type()
 		insts = append(insts, x.EmitPushNoRetain()...)
 		insts = append(insts, y.EmitPushNoRetain()...)
-		insts = append(insts, wat.NewInstSub(toWatType(ret_type)))
+
+		if ret_type.Equal(m.COMPLEX64) {
+			insts = append(insts, m.COMPLEX64.(*Complex64).emitSub()...)
+		} else if ret_type.Equal(m.COMPLEX128) {
+			insts = append(insts, m.COMPLEX128.(*Complex128).emitSub()...)
+		} else {
+			insts = append(insts, wat.NewInstSub(toWatType(ret_type)))
+		}
 
 		if ret_type.Equal(m.U8) {
 			insts = append(insts, wat.NewInstConst(wat.I32{}, "255"))
@@ -108,7 +120,14 @@ func (m *Module) EmitBinOp(x, y Value, op wat.OpCode) (insts []wat.Inst, ret_typ
 		ret_type = x.Type()
 		insts = append(insts, x.EmitPushNoRetain()...)
 		insts = append(insts, y.EmitPushNoRetain()...)
-		insts = append(insts, wat.NewInstMul(toWatType(ret_type)))
+
+		if ret_type.Equal(m.COMPLEX64) {
+			insts = append(insts, m.COMPLEX64.(*Complex64).emitMul()...)
+		} else if ret_type.Equal(m.COMPLEX128) {
+			insts = append(insts, m.COMPLEX128.(*Complex128).emitMul()...)
+		} else {
+			insts = append(insts, wat.NewInstMul(toWatType(ret_type)))
+		}
 
 		if ret_type.Equal(m.U8) {
 			insts = append(insts, wat.NewInstConst(wat.I32{}, "255"))
@@ -122,7 +141,14 @@ func (m *Module) EmitBinOp(x, y Value, op wat.OpCode) (insts []wat.Inst, ret_typ
 		ret_type = x.Type()
 		insts = append(insts, x.EmitPushNoRetain()...)
 		insts = append(insts, y.EmitPushNoRetain()...)
-		insts = append(insts, wat.NewInstDiv(toWatType(ret_type)))
+
+		if ret_type.Equal(m.COMPLEX64) {
+			insts = append(insts, m.COMPLEX64.(*Complex64).emitDiv()...)
+		} else if ret_type.Equal(m.COMPLEX128) {
+			insts = append(insts, m.COMPLEX128.(*Complex128).emitDiv()...)
+		} else {
+			insts = append(insts, wat.NewInstDiv(toWatType(ret_type)))
+		}
 
 	case wat.OpCodeRem:
 		ret_type = x.Type()
@@ -186,6 +212,28 @@ func (m *Module) EmitBinOp(x, y Value, op wat.OpCode) (insts []wat.Inst, ret_typ
 			insts = append(insts, wat.NewInstGe(toWatType(x.Type())))
 		}
 		ret_type = m.BOOL
+
+	case wat.OpCodeComp:
+		if x.Type().Equal(m.STRING) {
+			insts = append(insts, x.EmitPushNoRetain()...)
+			insts = append(insts, y.EmitPushNoRetain()...)
+			insts = append(insts, wat.NewInstCall("$wa.runtime.string_Comp"))
+		} else {
+			insts = append(insts, x.EmitPushNoRetain()...)
+			insts = append(insts, y.EmitPushNoRetain()...)
+			insts = append(insts, wat.NewInstLt(toWatType(x.Type())))
+
+			inst_lt := wat.NewInstIf(nil, nil, nil)
+			inst_lt.Ret = append(inst_lt.Ret, wat.I32{})
+			inst_lt.True = append(inst_lt.True, wat.NewInstConst(wat.I32{}, "-1"))
+			inst_lt.False = append(inst_lt.False, x.EmitPushNoRetain()...)
+			inst_lt.False = append(inst_lt.False, y.EmitPushNoRetain()...)
+			inst_lt.False = append(inst_lt.False, wat.NewInstGt(toWatType(x.Type())))
+
+			insts = append(insts, inst_lt)
+		}
+
+		ret_type = m.I32
 
 	case wat.OpCodeAnd:
 		ret_type = x.Type()
@@ -407,7 +455,7 @@ func (m *Module) EmitGenFieldAddr(x Value, field_id int) (insts []wat.Inst, ret_
 }
 
 func (m *Module) EmitGenIndexAddr(x, id Value) (insts []wat.Inst, ret_type ValueType, ret_val Value) {
-	if !id.Type().Equal(m.I32) {
+	if !id.Type().Equal(m.I32) && !id.Type().Equal(m.U32) {
 		panic("index should be i32")
 	}
 
@@ -519,6 +567,10 @@ func (m *Module) EmitGenMakeSlice(slice_type ValueType, Len, Cap Value) (insts [
 	return
 }
 
+func (m *Module) EmitGenMakeMap(map_type ValueType) (insts []wat.Inst) {
+	return map_type.(*Map).emitGenMake()
+}
+
 func (m *Module) EmitGenLookup(x, index Value, CommaOk bool) (insts []wat.Inst, ret_type ValueType) {
 	switch x := x.(type) {
 	case *aString:
@@ -530,6 +582,16 @@ func (m *Module) EmitGenLookup(x, index Value, CommaOk bool) (insts []wat.Inst, 
 			insts = x.emitAt(index)
 			ret_type = m.U8
 		}
+
+	case *aMap:
+		if CommaOk {
+			fileds := []ValueType{x.typ.Elem, m.BOOL}
+			ret_type = m.GenValueType_Tuple(fileds)
+		} else {
+			ret_type = x.typ.Elem
+		}
+
+		insts = x.emitLookup(index, CommaOk)
 
 	default:
 		logger.Fatalf("Todo: %T", x)
@@ -736,6 +798,11 @@ func (m *Module) EmitGenConvert(x Value, typ ValueType) (insts []wat.Inst) {
 			insts = append(insts, x.EmitPushNoRetain()...)
 			insts = append(insts, wat.NewInstCall("runtime.stringFromRune"))
 			return
+
+		case xt.Equal(m.U8):
+			insts = append(insts, x.EmitPushNoRetain()...)
+			insts = append(insts, wat.NewInstCall("runtime.stringFromRune"))
+			return
 		}
 
 	case typ.Equal(m.BYTES):
@@ -795,6 +862,9 @@ func (m *Module) EmitGenLen(x Value) (insts []wat.Inst) {
 	case *aString:
 		insts = x.ExtractByName("l").EmitPush()
 
+	case *aMap:
+		insts = x.emitLen()
+
 	default:
 		logger.Fatalf("Todo: %T", x)
 	}
@@ -835,6 +905,15 @@ func (m *Module) EmitGenCopy(x, y Value) (insts []wat.Inst) {
 	return
 }
 
+func (m *Module) EmitGenRaw(x Value) (insts []wat.Inst) {
+	s := x.(*aSlice)
+	return s.emitConvertToBytes()
+}
+
+func (m *Module) EmitGenSetFinalizer(x Value, fn_id int) (insts []wat.Inst) {
+	return x.(*aRef).emitGenSetFinalizer(fn_id)
+}
+
 func (m *Module) EmitGenMakeInterface(x Value, itype ValueType) (insts []wat.Inst) {
 	x_type := x.Type()
 	m.markConcreteTypeUsed(x_type)
@@ -860,26 +939,29 @@ func (m *Module) EmitGenMakeInterface(x Value, itype ValueType) (insts []wat.Ins
 			f.Locals = append(f.Locals, v0)
 			f.Locals = append(f.Locals, v1)
 
-			//f.Insts = append(f.Insts, v0.EmitInit()...)
-			//f.Insts = append(f.Insts, v1.EmitInit()...)
-
-			f.Insts = append(f.Insts, x_type.EmitLoadFromAddr(p0, 0)...)
-			f.Insts = append(f.Insts, v0.EmitPop()...)
-			f.Insts = append(f.Insts, x_type.EmitLoadFromAddr(p1, 0)...)
-			f.Insts = append(f.Insts, v1.EmitPop()...)
-
-			if ins, ok := v0.emitEq(v1); ok {
-				f.Insts = append(f.Insts, ins...)
-
-				f.Insts = append(f.Insts, v0.EmitRelease()...)
-				f.Insts = append(f.Insts, v1.EmitRelease()...)
-
-				m.AddFunc(&f)
-				compID = m.AddTableElem(f.InternalName)
-
-			} else {
-				compID = -1
+			f.Insts = append(f.Insts, p0.EmitPushNoRetain()...)
+			{
+				p0_valid := wat.NewInstIf(nil, nil, nil)
+				p0_valid.True = append(p0_valid.True, x_type.EmitLoadFromAddr(p0, 0)...)
+				p0_valid.True = append(p0_valid.True, v0.EmitPop()...)
+				f.Insts = append(f.Insts, p0_valid)
 			}
+
+			f.Insts = append(f.Insts, p1.EmitPushNoRetain()...)
+			{
+				p1_valid := wat.NewInstIf(nil, nil, nil)
+				p1_valid.True = append(p1_valid.True, x_type.EmitLoadFromAddr(p1, 0)...)
+				p1_valid.True = append(p1_valid.True, v1.EmitPop()...)
+				f.Insts = append(f.Insts, p1_valid)
+			}
+
+			f.Insts = append(f.Insts, v0.emitCompare(v1)...)
+
+			f.Insts = append(f.Insts, v0.EmitRelease()...)
+			f.Insts = append(f.Insts, v1.EmitRelease()...)
+
+			m.AddFunc(&f)
+			compID = m.AddTableElem(f.InternalName)
 
 			x_type.setOnComp(compID)
 		}
@@ -915,6 +997,11 @@ func (m *Module) EmitGenRange(x Value) (insts []wat.Inst, ret_type ValueType) {
 		insts = append(insts, x.ExtractByName("l").EmitPush()...)
 		insts = append(insts, wat.NewInstConst(wat.I32{}, "0"))
 
+	case *aMap:
+		ret_type, _ = m.findValueType("runtime.mapIter")
+		insts = append(insts, x.aRef.EmitPush()...)
+		insts = append(insts, wat.NewInstConst(wat.I32{}, "0"))
+
 	default:
 		logger.Fatalf("Todo:%T", x)
 	}
@@ -932,6 +1019,16 @@ func (m *Module) EmitGenNext_String(iter Value) (insts []wat.Inst, ret_type Valu
 	return
 }
 
+func (m *Module) EmitGenNext_Map(iter Value, ktype ValueType, vtype ValueType) (insts []wat.Inst, ret_type ValueType) {
+	fields := []ValueType{m.BOOL, ktype, vtype}
+	ret_type = m.GenValueType_Tuple(fields)
+
+	insts = append(insts, iter.EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstCall("runtime.map."+ktype.Named()+"."+vtype.Named()+".next"))
+	insts = append(insts, iter.(*aStruct).ExtractByName("pos").EmitPop()...)
+	return
+}
+
 func (m *Module) EmitInvoke(i Value, params []Value, mid int, typeName string) (insts []wat.Inst) {
 	iface := i.(*aInterface)
 	insts = append(insts, iface.ExtractByName("d").EmitPushNoRetain()...)
@@ -945,6 +1042,16 @@ func (m *Module) EmitInvoke(i Value, params []Value, mid int, typeName string) (
 
 	insts = append(insts, wat.NewInstCallIndirect(typeName))
 	return
+}
+
+func (m *Module) EmitGenMapUpdate(ma, k, v Value) (insts []wat.Inst) {
+	mi := ma.(*aMap)
+	return mi.emitUpdate(k, v)
+}
+
+func (m *Module) EmitGenDelete(ma, k Value) (insts []wat.Inst) {
+	mi := ma.(*aMap)
+	return mi.emitDelete(k)
 }
 
 func (m *Module) EmitPrintString(v Value) (insts []wat.Inst) {
@@ -969,6 +1076,54 @@ func (m *Module) EmitPrintInterface(v Value) (insts []wat.Inst) {
 
 	insts = append(insts, i.ExtractByName("itab").EmitPushNoRetain()...)
 	insts = append(insts, wat.NewInstCall("$runtime.waPrintU32Ptr")) // itab
+
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa(')')))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))
+	return
+}
+
+func (m *Module) EmitPrintRef(v Value) (insts []wat.Inst) {
+	i := v.(*aRef)
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa('(')))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))
+
+	insts = append(insts, i.ExtractByName("b").EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintU32Ptr")) // block
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa(',')))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))
+
+	insts = append(insts, i.ExtractByName("b").EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstLoad(wat.I32{}, 0, 1))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintI32")) // refcount
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa(',')))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))
+
+	insts = append(insts, i.ExtractByName("d").EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintU32Ptr")) // data
+
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa(')')))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))
+	return
+}
+
+func (m *Module) EmitPrintClosure(v Value) (insts []wat.Inst) {
+	i := v.(*aClosure)
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa('(')))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))
+
+	insts = append(insts, i.ExtractByName("fn_index").EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintI32")) // fn_index
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa(',')))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))
+
+	insts = append(insts, i.ExtractByName("d").(*aRef).ExtractByName("b").EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintU32Ptr")) // data.block
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa(',')))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))
+
+	insts = append(insts, i.ExtractByName("d").(*aRef).ExtractByName("b").EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstLoad(wat.I32{}, 0, 1))
+	insts = append(insts, wat.NewInstCall("$runtime.waPrintI32")) // data.block.RefCount
 
 	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa(')')))
 	insts = append(insts, wat.NewInstCall("$runtime.waPrintRune"))

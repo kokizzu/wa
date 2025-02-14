@@ -45,7 +45,7 @@ func (m *Module) GenValueType_Ref(base ValueType) *Ref {
 func (t *Ref) Size() int            { return t.underlying.Size() }
 func (t *Ref) align() int           { return t.underlying.align() }
 func (t *Ref) Kind() TypeKind       { return kRef }
-func (t *Ref) onFree() int          { return t.underlying.onFree() }
+func (t *Ref) OnFree() int          { return t.underlying.OnFree() }
 func (t *Ref) Raw() []wat.ValueType { return t.underlying.Raw() }
 func (t *Ref) Equal(u ValueType) bool {
 	if ut, ok := u.(*Ref); ok {
@@ -68,7 +68,7 @@ func (t *Ref) emitHeapAlloc() (insts []wat.Inst) {
 	//insts = append(insts, wat.NewComment("Ref.emitHeapAlloc start"))
 
 	insts = append(insts, t._base_block.emitHeapAlloc(NewConst("1", t.underlying._u32))...)
-	insts = append(insts, wat.NewInstCall("$wa.runtime.DupI32"))
+	insts = append(insts, wat.NewInstCall("runtime.DupI32"))
 	insts = append(insts, NewConst("16", t.underlying._u32).EmitPush()...)
 	insts = append(insts, wat.NewInstAdd(wat.U32{}))
 
@@ -86,7 +86,7 @@ func (t *Ref) emitStackAlloc() (insts []wat.Inst) {
 
 	insts = append(insts, NewConst("0", t.underlying._u32).EmitPush()...)
 	insts = append(insts, NewConst(strconv.Itoa(t.Base.Size()), t.underlying._u32).EmitPush()...)
-	insts = append(insts, wat.NewInstCall("$waStackAlloc"))
+	insts = append(insts, wat.NewInstCall("runtime.stackAlloc"))
 
 	//insts = append(insts, wat.NewComment("Ref.emitStackAlloc end"))
 	//insts = append(insts, wat.NewBlank())
@@ -95,6 +95,10 @@ func (t *Ref) emitStackAlloc() (insts []wat.Inst) {
 
 func (t *Ref) EmitLoadFromAddr(addr Value, offset int) []wat.Inst {
 	return t.underlying.EmitLoadFromAddr(addr, offset)
+}
+
+func (t *Ref) EmitLoadFromAddrNoRetain(addr Value, offset int) []wat.Inst {
+	return t.underlying.EmitLoadFromAddrNoRetain(addr, offset)
 }
 
 func (t *Ref) newConstRef(ptr int) *aRef {
@@ -121,10 +125,6 @@ func newValue_Ref(name string, kind ValueKind, typ *Ref) *aRef {
 
 func (v *aRef) Type() ValueType { return v.typ }
 
-func (v *aRef) emitStoreToAddr(addr Value, offset int) []wat.Inst {
-	return v.aStruct.emitStoreToAddr(addr, offset)
-}
-
 func (v *aRef) emitGetValue() []wat.Inst {
 	return v.typ.Base.EmitLoadFromAddr(v.aStruct.ExtractByName("d"), 0)
 }
@@ -145,6 +145,14 @@ func (v *aRef) emitEq(r Value) (insts []wat.Inst, ok bool) {
 	return v.ExtractByName("d").emitEq(r.(*aRef).ExtractByName("d"))
 }
 
+func (v *aRef) emitCompare(r Value) (insts []wat.Inst) {
+	if !v.Type().Equal(r.Type()) {
+		logger.Fatal("v.Type() != r.Type()")
+	}
+
+	return v.ExtractByName("d").emitCompare(r.(*aRef).ExtractByName("d"))
+}
+
 func (v *aRef) getConstPtr() int {
 	if v.kind != ValueKindConst {
 		logger.Fatal("Must be a const")
@@ -152,4 +160,12 @@ func (v *aRef) getConstPtr() int {
 
 	i, _ := strconv.Atoi(v.ExtractByName("d").Name())
 	return i
+}
+
+func (v *aRef) emitGenSetFinalizer(fn_id int) (insts []wat.Inst) {
+	insts = append(insts, v.ExtractByName("b").EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstConst(wat.I32{}, strconv.Itoa(fn_id)))
+	insts = append(insts, wat.NewInstCall("runtime.Block.SetFinalizer"))
+
+	return
 }

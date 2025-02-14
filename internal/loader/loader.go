@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"wa-lang.org/wa/internal/ast"
+	"wa-lang.org/wa/internal/ast/astutil"
 	"wa-lang.org/wa/internal/config"
 	wzparser "wa-lang.org/wa/internal/frontend/wz/parser"
 	"wa-lang.org/wa/internal/loader/buildtag"
@@ -21,8 +22,10 @@ import (
 	"wa-lang.org/wa/internal/token"
 	"wa-lang.org/wa/internal/types"
 	"wa-lang.org/wa/internal/wamime"
-	"wa-lang.org/wa/waroot"
+	wasrc "wa-lang.org/wa/waroot/src"
 )
+
+var _loadRuntime bool = true
 
 type _Loader struct {
 	cfg  config.Config
@@ -101,18 +104,22 @@ func (p *_Loader) loadProgram(vfs *config.PkgVFS, manifest *config.Manifest) (*P
 	p.prog.Fset = token.NewFileSet()
 
 	if p.vfs.Std == nil {
-		if p.cfg.WaRoot != "" {
-			p.vfs.Std = os.DirFS(filepath.Join(p.cfg.WaRoot, "src"))
+		// pkg/std
+		stdPath := filepath.Join(manifest.Root, "pkg", "std")
+		if dirPathExists(stdPath) {
+			vfs.Std = os.DirFS(stdPath)
 		} else {
-			p.vfs.Std = waroot.GetFS()
+			vfs.Std = wasrc.GetStdFS()
 		}
 	}
 
 	// import "runtime"
-	logger.Trace(&config.EnableTrace_loader, "import runtime")
-	if _, err := p.Import("runtime"); err != nil {
-		logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
-		return nil, err
+	if _loadRuntime {
+		logger.Trace(&config.EnableTrace_loader, "import runtime")
+		if _, err := p.Import("runtime"); err != nil {
+			logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
+			return nil, err
+		}
 	}
 
 	// import "main"
@@ -174,8 +181,30 @@ func (p *_Loader) Import(pkgpath string) (*types.Package, error) {
 	var pkg Package
 	var filenames []string
 
+	if pkgpath == "unsafe" {
+		pkg.Pkg = types.Unsafe
+		pkg.Info = &types.Info{
+			Types:      make(map[ast.Expr]types.TypeAndValue),
+			Defs:       make(map[*ast.Ident]types.Object),
+			Uses:       make(map[*ast.Ident]types.Object),
+			Implicits:  make(map[ast.Node]types.Object),
+			Selections: make(map[*ast.SelectorExpr]*types.Selection),
+			Scopes:     make(map[ast.Node]*types.Scope),
+		}
+
+		p.prog.Pkgs[pkgpath] = &pkg
+		return pkg.Pkg, nil
+	}
+
 	// 解析当前包的汇编代码
 	pkg.WsFiles, err = p.ParseDir_wsFiles(pkgpath)
+	if err != nil {
+		logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
+		return nil, err
+	}
+
+	// 解析当前包的宿主代码
+	pkg.WImportFiles, err = p.ParseDir_hostImportFiles(pkgpath)
 	if err != nil {
 		logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
 		return nil, err
@@ -189,13 +218,15 @@ func (p *_Loader) Import(pkgpath string) (*types.Package, error) {
 	}
 
 	// main 包隐式导入 runtime
-	if pkgpath == p.prog.Manifest.MainPkg && pkgpath != "runtime" {
-		if len(pkg.Files) > 0 {
-			f, err := parser.ParseFile(nil, p.prog.Fset, "_$main$runtime.wa", `import "runtime" => _`, parser.AllErrors)
-			if err != nil {
-				panic(err)
+	if _loadRuntime {
+		if pkgpath == p.prog.Manifest.MainPkg && pkgpath != "runtime" {
+			if len(pkg.Files) > 0 {
+				f, err := parser.ParseFile(nil, p.prog.Fset, "_$main$runtime.wa", `import "runtime" => _`, parser.AllErrors)
+				if err != nil {
+					panic(err)
+				}
+				pkg.Files[0].Decls = append(f.Decls, pkg.Files[0].Decls...)
 			}
-			pkg.Files[0].Decls = append(f.Decls, pkg.Files[0].Decls...)
 		}
 	}
 
@@ -426,10 +457,71 @@ func (p *_Loader) ParseDir_wsFiles(pkgpath string) (files []*WsFile, err error) 
 	return
 }
 
+func (p *_Loader) ParseDir_hostImportFiles(pkgpath string) (files []*WhostFile, err error) {
+	logger.Tracef(&config.EnableTrace_loader, "pkgpath: %v", pkgpath)
+
+	if p.cfg.Target == "" && p.prog.Manifest.Pkg.Target == "" {
+		p.cfg.Target = config.WaOS_Default
+		p.prog.Manifest.Pkg.Target = config.WaOS_Default
+	}
+
+	var (
+		extNames          = []string{fmt.Sprintf(".import.%s", p.GetTargetOS())}
+		unitTestMode bool = false
+
+		filenames []string
+		datas     [][]byte
+	)
+
+	switch {
+	case p.isStdPkg(pkgpath):
+		logger.Tracef(&config.EnableTrace_loader, "isStdPkg; pkgpath: %v", pkgpath)
+
+		filenames, datas, err = p.readDirFiles(p.vfs.Std, pkgpath, unitTestMode, extNames)
+		if err != nil {
+			logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
+			return nil, err
+		}
+	case p.isSelfPkg(pkgpath):
+		relpkg := strings.TrimPrefix(pkgpath, p.prog.Manifest.Pkg.Pkgpath)
+		if relpkg == "" {
+			relpkg = "."
+		}
+
+		logger.Tracef(&config.EnableTrace_loader, "isSelfPkg; pkgpath=%v, relpkg=%v", pkgpath, relpkg)
+
+		filenames, datas, err = p.readDirFiles(p.vfs.App, relpkg, unitTestMode, extNames)
+		if err != nil {
+			logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
+			return nil, err
+		}
+
+		logger.Trace(&config.EnableTrace_loader, "isSelfPkg; return ok")
+
+	default: // vendor
+		logger.Tracef(&config.EnableTrace_loader, "vendorPkg; pkgpath: %v", pkgpath)
+
+		filenames, datas, err = p.readDirFiles(p.vfs.Vendor, pkgpath, unitTestMode, extNames)
+		if err != nil {
+			logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
+			return nil, err
+		}
+	}
+
+	for i := 0; i < len(filenames); i++ {
+		files = append(files, &WhostFile{
+			Name: filenames[i],
+			Code: string(datas[i]),
+		})
+	}
+	return
+}
+
 func (p *_Loader) ParseDir(pkgpath string) (filenames []string, files []*ast.File, err error) {
 	logger.Tracef(&config.EnableTrace_loader, "pkgpath: %v", pkgpath)
 
 	var (
+		pkgVFS       fs.FS
 		extNames          = []string{".wa", ".wz", ".wa.go"}
 		unitTestMode bool = false
 		datas        [][]byte
@@ -442,6 +534,7 @@ func (p *_Loader) ParseDir(pkgpath string) (filenames []string, files []*ast.Fil
 	case p.isStdPkg(pkgpath):
 		logger.Tracef(&config.EnableTrace_loader, "isStdPkg; pkgpath: %v", pkgpath)
 
+		pkgVFS = p.vfs.Std
 		filenames, datas, err = p.readDirFiles(p.vfs.Std, pkgpath, unitTestMode, extNames)
 		if err != nil {
 			logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
@@ -455,6 +548,7 @@ func (p *_Loader) ParseDir(pkgpath string) (filenames []string, files []*ast.Fil
 
 		logger.Tracef(&config.EnableTrace_loader, "isSelfPkg; pkgpath=%v, relpkg=%v", pkgpath, relpkg)
 
+		pkgVFS = p.vfs.App
 		filenames, datas, err = p.readDirFiles(p.vfs.App, relpkg, unitTestMode, extNames)
 		if err != nil {
 			logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
@@ -466,6 +560,7 @@ func (p *_Loader) ParseDir(pkgpath string) (filenames []string, files []*ast.Fil
 	default: // vendor
 		logger.Tracef(&config.EnableTrace_loader, "vendorPkg; pkgpath: %v", pkgpath)
 
+		pkgVFS = p.vfs.Vendor
 		filenames, datas, err = p.readDirFiles(p.vfs.Vendor, pkgpath, unitTestMode, extNames)
 		if err != nil {
 			logger.Tracef(&config.EnableTrace_loader, "err: %v", err)
@@ -490,6 +585,28 @@ func (p *_Loader) ParseDir(pkgpath string) (filenames []string, files []*ast.Fil
 			return nil, nil, err
 		}
 		files = append(files, f)
+	}
+
+	// read embed files
+	for _, f := range files {
+		for _, commentGroup := range f.Comments {
+			info := astutil.ParseCommentInfo(commentGroup)
+			if info.Embed == "" {
+				continue
+			}
+
+			if f.EmbedMap == nil {
+				f.EmbedMap = make(map[string]string)
+			}
+
+			vpath := pathpkg.Join(pkgpath, info.Embed)
+			data, err := fs.ReadFile(pkgVFS, vpath)
+			if err != nil {
+				continue
+			}
+
+			f.EmbedMap[info.Embed] = string(data)
+		}
 	}
 
 	return filenames, files, nil
@@ -562,7 +679,7 @@ func (p *_Loader) hasExt(name string, extensions ...string) bool {
 }
 
 func (p *_Loader) isStdPkg(pkgpath string) bool {
-	return waroot.IsStdPkg(pkgpath)
+	return wasrc.IsStdPkg(pkgpath)
 }
 
 func (p *_Loader) isSelfPkg(pkgpath string) bool {
@@ -578,7 +695,7 @@ func (p *_Loader) isSelfPkg(pkgpath string) bool {
 func (p *_Loader) getSizes() types.Sizes {
 	var zero config.StdSizes
 	if p == nil || p.cfg.WaSizes == zero {
-		return types.SizesFor(p.cfg.WaArch)
+		return types.SizesFor(p.GetTargetArch())
 	} else {
 		return &types.StdSizes{
 			WordSize: p.cfg.WaSizes.WordSize,
@@ -627,7 +744,7 @@ func (p *_Loader) isSkipedAstFile(f *ast.File) (bool, error) {
 		return false, err
 	}
 	ok := expr.Eval(func(tag string) bool {
-		if tag == p.cfg.WaOS || tag == p.cfg.WaArch {
+		if tag == p.GetTargetOS() || tag == p.GetTargetArch() {
 			return true
 		}
 		for _, x := range p.cfg.BuilgTags {
@@ -658,7 +775,7 @@ func (p *_Loader) isSkipedSouceFile(filename string, unitTestMode bool, extNames
 		}
 	}
 
-	if p.cfg.WaOS != "" {
+	if p.GetTargetOS() != "" {
 		var isTargetFile bool
 		for _, ext := range extNames {
 			for _, os := range config.WaOS_List {
@@ -671,7 +788,7 @@ func (p *_Loader) isSkipedSouceFile(filename string, unitTestMode bool, extNames
 		if isTargetFile {
 			var shouldSkip = true
 			for _, ext := range extNames {
-				if strings.HasSuffix(filename, "_"+p.cfg.WaOS+ext) {
+				if strings.HasSuffix(filename, "_"+p.GetTargetOS()+ext) {
 					shouldSkip = false
 					break
 				}
@@ -702,4 +819,18 @@ func (p *_Loader) isTestFile(filename string) bool {
 		return true
 	}
 	return false
+}
+
+func (p *_Loader) GetTargetOS() string {
+	if s := p.cfg.Target; s != "" {
+		return s
+	}
+	if s := p.prog.Manifest.Pkg.Target; s != "" {
+		return s
+	}
+	return config.WaOS_Default
+}
+
+func (p *_Loader) GetTargetArch() string {
+	return config.WaArch_Default
 }

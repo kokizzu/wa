@@ -24,8 +24,14 @@ func NewGlobal(name string, typ ValueType) Value {
 
 func newValue(name string, kind ValueKind, typ ValueType) Value {
 	switch typ := typ.(type) {
-	case *tI8, *tU8, *tI16, *tU16, *tI32, *tU32, *tI64, *tU64, *tF32, *tF64, *tRune, *tBool:
+	case *I8, *U8, *I16, *U16, *I32, *U32, *I64, *U64, *F32, *F64, *Rune, *Bool:
 		return newValue_Basic(name, kind, typ)
+
+	case *Complex64:
+		return newValue_Complex64(name, kind, typ)
+
+	case *Complex128:
+		return newValue_Complex128(name, kind, typ)
 
 	case *Ptr:
 		return newValue_Ptr(name, kind, typ)
@@ -41,6 +47,9 @@ func newValue(name string, kind ValueKind, typ ValueType) Value {
 
 	case *Slice:
 		return newValue_Slice(name, kind, typ)
+
+	case *Map:
+		return newValue_Map(name, kind, typ)
 
 	case *String:
 		return newValue_String(name, kind, typ)
@@ -141,30 +150,30 @@ func (v *aBasic) emitStoreToAddr(addr Value, offset int) []wat.Inst {
 	insts := addr.EmitPush()
 	insts = append(insts, v.EmitPush()...)
 	switch v.Type().(type) {
-	case *tU8, *tI8:
+	case *U8, *I8, *Bool:
 		insts = append(insts, wat.NewInstStore8(offset, 1))
 
-	case *tU16, *tI16:
-		insts = append(insts, wat.NewInstStore16(offset, 1))
+	case *U16, *I16:
+		insts = append(insts, wat.NewInstStore16(offset, 2))
 
 	default:
-		insts = append(insts, wat.NewInstStore(toWatType(v.Type()), offset, 1))
+		insts = append(insts, wat.NewInstStore(toWatType(v.Type()), offset, v.Type().align()))
 	}
 	return insts
 }
 
 func (v *aBasic) emitStore(offset int) (insts []wat.Inst) {
-	insts = append(insts, wat.NewInstCall("$wa.runtime.DupI32"))
+	insts = append(insts, wat.NewInstCall("runtime.DupI32"))
 	insts = append(insts, v.EmitPush()...)
 	switch v.Type().(type) {
-	case *tU8, *tI8:
+	case *U8, *I8, *Bool:
 		insts = append(insts, wat.NewInstStore8(offset, 1))
 
-	case *tU16, *tI16:
-		insts = append(insts, wat.NewInstStore16(offset, 1))
+	case *U16, *I16:
+		insts = append(insts, wat.NewInstStore16(offset, 2))
 
 	default:
-		insts = append(insts, wat.NewInstStore(toWatType(v.Type()), offset, 1))
+		insts = append(insts, wat.NewInstStore(toWatType(v.Type()), offset, v.Type().align()))
 	}
 
 	return
@@ -176,32 +185,32 @@ func (v *aBasic) Bin() (b []byte) {
 	}
 
 	switch v.Type().(type) {
-	case *tU8, *tBool:
+	case *U8, *Bool:
 		b = make([]byte, 1)
 		i, _ := strconv.ParseUint(v.Name(), 0, 8)
 		b[0] = byte(i)
 
-	case *tI8:
+	case *I8:
 		b = make([]byte, 1)
 		i, _ := strconv.ParseInt(v.Name(), 0, 8)
 		si := uint8(int8(i))
 		b[0] = byte(si)
 
-	case *tU16:
+	case *U16:
 		b = make([]byte, 2)
 		i, _ := strconv.ParseUint(v.Name(), 0, 16)
 		si := uint16(i)
 		b[0] = byte(si & 0xFF)
 		b[1] = byte((si >> 8) & 0xFF)
 
-	case *tI16:
+	case *I16:
 		b = make([]byte, 2)
 		i, _ := strconv.ParseInt(v.Name(), 0, 16)
 		si := uint16(int16(i))
 		b[0] = byte(si & 0xFF)
 		b[1] = byte((si >> 8) & 0xFF)
 
-	case *tU32:
+	case *U32, *Rune:
 		b = make([]byte, 4)
 		i, _ := strconv.ParseUint(v.Name(), 0, 32)
 		si := uint32(i)
@@ -210,7 +219,7 @@ func (v *aBasic) Bin() (b []byte) {
 		b[2] = byte((si >> 16) & 0xFF)
 		b[3] = byte((si >> 24) & 0xFF)
 
-	case *tI32:
+	case *I32:
 		b = make([]byte, 4)
 		i, _ := strconv.ParseInt(v.Name(), 0, 32)
 		si := uint32(int32(i))
@@ -219,7 +228,7 @@ func (v *aBasic) Bin() (b []byte) {
 		b[2] = byte((si >> 16) & 0xFF)
 		b[3] = byte((si >> 24) & 0xFF)
 
-	case *tU64:
+	case *U64:
 		b = make([]byte, 8)
 		i, _ := strconv.ParseUint(v.Name(), 0, 64)
 		si := uint64(i)
@@ -232,7 +241,7 @@ func (v *aBasic) Bin() (b []byte) {
 		b[6] = byte((si >> 48) & 0xFF)
 		b[7] = byte((si >> 56) & 0xFF)
 
-	case *tI64:
+	case *I64:
 		b = make([]byte, 8)
 		i, _ := strconv.ParseInt(v.Name(), 0, 6)
 		si := uint64(int64(i))
@@ -245,7 +254,7 @@ func (v *aBasic) Bin() (b []byte) {
 		b[6] = byte((si >> 48) & 0xFF)
 		b[7] = byte((si >> 56) & 0xFF)
 
-	case *tF32:
+	case *F32:
 		b = make([]byte, 4)
 		f, _ := strconv.ParseFloat(v.Name(), 32)
 		si := math.Float32bits(float32(f))
@@ -254,7 +263,7 @@ func (v *aBasic) Bin() (b []byte) {
 		b[2] = byte((si >> 16) & 0xFF)
 		b[3] = byte((si >> 24) & 0xFF)
 
-	case *tF64:
+	case *F64:
 		b = make([]byte, 8)
 		f, _ := strconv.ParseFloat(v.Name(), 64)
 		si := math.Float64bits(f)
@@ -268,7 +277,7 @@ func (v *aBasic) Bin() (b []byte) {
 		b[7] = byte((si >> 56) & 0xFF)
 
 	default:
-		panic("todo")
+		logger.Fatalf("todo: %T", v.Type())
 	}
 
 	return
@@ -278,11 +287,32 @@ func (v *aBasic) emitEq(r Value) (insts []wat.Inst, ok bool) {
 	if !v.Type().Equal(r.Type()) {
 		logger.Fatal("v.Type() != r.Type()")
 	}
-	insts = append(insts, v.EmitPush()...)
-	insts = append(insts, r.EmitPush()...)
+	insts = append(insts, v.EmitPushNoRetain()...)
+	insts = append(insts, r.EmitPushNoRetain()...)
 	insts = append(insts, wat.NewInstEq(toWatType(v.Type())))
 
 	ok = true
 
+	return
+}
+
+func (v *aBasic) emitCompare(r Value) (insts []wat.Inst) {
+	if !v.Type().Equal(r.Type()) {
+		logger.Fatal("v.Type() != r.Type()")
+	}
+
+	insts = append(insts, v.EmitPushNoRetain()...)
+	insts = append(insts, r.EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstLt(toWatType(v.Type())))
+
+	instLe := wat.NewInstIf(nil, nil, []wat.ValueType{wat.I32{}})
+
+	instLe.True = append(instLe.True, wat.NewInstConst(wat.I32{}, "-1"))
+
+	instLe.False = append(instLe.False, v.EmitPushNoRetain()...)
+	instLe.False = append(instLe.False, r.EmitPushNoRetain()...)
+	instLe.False = append(instLe.False, wat.NewInstGt(toWatType(v.Type())))
+
+	insts = append(insts, instLe)
 	return
 }

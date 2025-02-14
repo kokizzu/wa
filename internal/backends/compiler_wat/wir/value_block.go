@@ -44,9 +44,9 @@ func (t *Block) Equal(u ValueType) bool {
 	return false
 }
 
-func (t *Block) onFree() int {
+func (t *Block) OnFree() int {
 	var f Function
-	f.InternalName = "$" + GenSymbolName(t.Named()) + ".$$onFree"
+	f.InternalName = "$" + GenSymbolName(t.Named()) + ".$$OnFree"
 	if i := currentModule.findTableElem(f.InternalName); i != 0 {
 		return i
 	}
@@ -56,7 +56,7 @@ func (t *Block) onFree() int {
 
 	f.Insts = append(f.Insts, ptr.EmitPush()...)
 	f.Insts = append(f.Insts, wat.NewInstLoad(wat.U32{}, 0, 1))
-	f.Insts = append(f.Insts, wat.NewInstCall("$Release"))
+	f.Insts = append(f.Insts, wat.NewInstCall("runtime.Block.Release"))
 	f.Insts = append(f.Insts, ptr.EmitPush()...)
 	f.Insts = append(f.Insts, wat.NewInstConst(wat.U32{}, "0"))
 	f.Insts = append(f.Insts, wat.NewInstStore(wat.U32{}, 0, 1))
@@ -67,8 +67,14 @@ func (t *Block) onFree() int {
 
 func (t *Block) EmitLoadFromAddr(addr Value, offset int) (insts []wat.Inst) {
 	insts = append(insts, addr.EmitPush()...)
-	insts = append(insts, wat.NewInstLoad(wat.U32{}, offset, 1))
-	insts = append(insts, wat.NewInstCall("$Retain"))
+	insts = append(insts, wat.NewInstLoad(wat.U32{}, offset, 4))
+	insts = append(insts, wat.NewInstCall("runtime.Block.Retain"))
+	return
+}
+
+func (t *Block) EmitLoadFromAddrNoRetain(addr Value, offset int) (insts []wat.Inst) {
+	insts = append(insts, addr.EmitPush()...)
+	insts = append(insts, wat.NewInstLoad(wat.U32{}, offset, 4))
 	return
 }
 
@@ -81,7 +87,7 @@ func (t *Block) emitHeapAlloc(item_count Value) (insts []wat.Inst) {
 			return nil
 		}
 		insts = append(insts, NewConst(strconv.Itoa(t.Base.Size()*c+16), t._uint).EmitPush()...)
-		insts = append(insts, wat.NewInstCall("$waHeapAlloc"))
+		insts = append(insts, wat.NewInstCall("runtime.HeapAlloc"))
 
 	default:
 		if !item_count.Type().Equal(t._uint) && !item_count.Type().Equal(t._int) {
@@ -94,14 +100,14 @@ func (t *Block) emitHeapAlloc(item_count Value) (insts []wat.Inst) {
 		insts = append(insts, wat.NewInstMul(wat.U32{}))
 		insts = append(insts, NewConst("16", t._uint).EmitPush()...)
 		insts = append(insts, wat.NewInstAdd(wat.U32{}))
-		insts = append(insts, wat.NewInstCall("$waHeapAlloc"))
+		insts = append(insts, wat.NewInstCall("runtime.HeapAlloc"))
 
 	}
 
 	insts = append(insts, item_count.EmitPush()...)                                       //item_count
-	insts = append(insts, NewConst(strconv.Itoa(t.Base.onFree()), t._uint).EmitPush()...) //free_method
+	insts = append(insts, NewConst(strconv.Itoa(t.Base.OnFree()), t._uint).EmitPush()...) //free_method
 	insts = append(insts, NewConst(strconv.Itoa(t.Base.Size()), t._uint).EmitPush()...)   //item_size
-	insts = append(insts, wat.NewInstCall("$wa.runtime.Block.Init"))
+	insts = append(insts, wat.NewInstCall("runtime.Block.Init"))
 
 	return
 }
@@ -133,7 +139,7 @@ func (v *aBlock) EmitPush() (insts []wat.Inst) {
 		return
 	}
 
-	insts = append(insts, wat.NewInstCall("$Retain"))
+	insts = append(insts, wat.NewInstCall("runtime.Block.Retain"))
 	return
 }
 
@@ -153,7 +159,7 @@ func (v *aBlock) EmitRelease() (insts []wat.Inst) {
 		return
 	}
 	insts = append(insts, v.push(v.name))
-	insts = append(insts, wat.NewInstCall("$Release"))
+	insts = append(insts, wat.NewInstCall("runtime.Block.Release"))
 	return
 }
 
@@ -163,23 +169,23 @@ func (v *aBlock) emitStoreToAddr(addr Value, offset int) (insts []wat.Inst) {
 	//		return
 	//	}
 	//}
-	insts = append(insts, addr.EmitPush()...)                    // a
-	insts = append(insts, v.EmitPush()...)                       // a v
-	insts = append(insts, addr.EmitPush()...)                    // a v a
-	insts = append(insts, wat.NewInstLoad(wat.U32{}, offset, 1)) // a v o
-	insts = append(insts, wat.NewInstCall("$Release"))           // a v
+	insts = append(insts, addr.EmitPush()...)                       // a
+	insts = append(insts, v.EmitPush()...)                          // a v
+	insts = append(insts, addr.EmitPush()...)                       // a v a
+	insts = append(insts, wat.NewInstLoad(wat.U32{}, offset, 1))    // a v o
+	insts = append(insts, wat.NewInstCall("runtime.Block.Release")) // a v
 
 	insts = append(insts, wat.NewInstStore(toWatType(v.Type()), offset, 1))
 	return
 }
 
 func (v *aBlock) emitStore(offset int) (insts []wat.Inst) {
-	insts = append(insts, wat.NewInstCall("$wa.runtime.DupI32"))  // a
-	insts = append(insts, wat.NewInstCall("$wa.runtime.DupI32"))  // a a
-	insts = append(insts, v.EmitPush()...)                        // a a v
-	insts = append(insts, wat.NewInstCall("$wa.runtime.SwapI32")) // a v a
-	insts = append(insts, wat.NewInstLoad(wat.U32{}, offset, 1))  // a v o
-	insts = append(insts, wat.NewInstCall("$Release"))            // a v
+	insts = append(insts, wat.NewInstCall("runtime.DupI32"))        // a
+	insts = append(insts, wat.NewInstCall("runtime.DupI32"))        // a a
+	insts = append(insts, v.EmitPush()...)                          // a a v
+	insts = append(insts, wat.NewInstCall("runtime.SwapI32"))       // a v a
+	insts = append(insts, wat.NewInstLoad(wat.U32{}, offset, 1))    // a v o
+	insts = append(insts, wat.NewInstCall("runtime.Block.Release")) // a v
 
 	insts = append(insts, wat.NewInstStore(toWatType(v.Type()), offset, 1))
 	return
@@ -203,4 +209,24 @@ func (v *aBlock) Bin() (b []byte) {
 func (v *aBlock) emitEq(r Value) ([]wat.Inst, bool) {
 	//logger.Fatal("aBlock shouldn't be compared.")
 	return nil, false
+}
+
+func (v *aBlock) emitCompare(r Value) (insts []wat.Inst) {
+	if !v.Type().Equal(r.Type()) {
+		logger.Fatal("v.Type() != r.Type()")
+	}
+
+	insts = append(insts, v.EmitPushNoRetain()...)
+	insts = append(insts, r.EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstLt(toWatType(v.Type())))
+
+	instLe := wat.NewInstIf(nil, nil, []wat.ValueType{wat.I32{}})
+	instLe.True = append(instLe.True, wat.NewInstConst(wat.I32{}, "-1"))
+
+	instLe.False = append(instLe.False, v.EmitPushNoRetain()...)
+	instLe.False = append(instLe.False, r.EmitPushNoRetain()...)
+	instLe.False = append(instLe.False, wat.NewInstGt(toWatType(v.Type())))
+
+	insts = append(insts, instLe)
+	return
 }

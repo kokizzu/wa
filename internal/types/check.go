@@ -25,10 +25,9 @@ const (
 // Strict mode are Go 1 compliant, but not all Go 1 programs
 // will pass in Strict mode. The additional rules are:
 //
-// - A type assertion x.(T) where T is an interface type
-//   is invalid if any (statically known) method that exists
-//   for both x and T have different signatures.
-//
+//   - A type assertion x.(T) where T is an interface type
+//     is invalid if any (statically known) method that exists
+//     for both x and T have different signatures.
 const strict = false
 
 // exprInfo stores information about an untyped expression.
@@ -49,6 +48,9 @@ type context struct {
 	isPanic       map[*ast.CallExpr]bool // set of panic call expressions (used for termination check)
 	hasLabel      bool                   // set if a function makes use of labels (only ~1% of functions); unused outside functions
 	hasCallOrRecv bool                   // set if an expression contains a function call or channel receive operation
+
+	// 在处理重载时, try最佳匹配阶段忽略闭包的body定义
+	ignoreFuncLitBody bool
 }
 
 // lookup looks up name in the current context and returns the matching object, or nil.
@@ -250,6 +252,10 @@ func (check *Checker) checkFiles(files []*ast.File) (err error) {
 	check.initFiles(files)
 
 	check.collectObjects()
+
+	check.processGlobalEmbed()
+	check.processGenericFuncs()
+	check.processTypeOperators()
 
 	check.packageObjects()
 

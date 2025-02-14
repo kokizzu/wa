@@ -19,6 +19,12 @@ import (
 // but x.expr is not set. If the call is invalid, the result is
 // false, and *x is undefined.
 func (check *Checker) builtin(x *operand, call *ast.CallExpr, id builtinId) (_ bool) {
+	for i, arg := range call.Args {
+		if expr := check.tryFixOperatorCall(arg); expr != nil {
+			call.Args[i] = expr
+		}
+	}
+
 	// append is the only built-in that permits the use of ... for the last argument
 	bin := predeclaredFuncs[id]
 	if call.Ellipsis.IsValid() && id != _Append {
@@ -527,6 +533,64 @@ func (check *Checker) builtin(x *operand, call *ast.CallExpr, id builtinId) (_ b
 			check.recordBuiltinType(call.Fun, makeSig(x.typ))
 		}
 
+	case _Raw:
+		if _, ok := x.typ.Underlying().(*Slice); !ok {
+			check.invalidArg(x.pos(), "%s is not a slice", x.typ)
+			return
+		}
+
+		retType := NewSlice(Typ[Uint8])
+		if check.Types != nil {
+			check.recordBuiltinType(
+				call.Fun, makeSig(retType, x.typ),
+			)
+		}
+
+		x.mode = value
+		x.typ = retType
+
+	case _SetFinalizer:
+		var params []Type
+		if nargs > 0 {
+			params = make([]Type, nargs)
+			for i := 0; i < nargs; i++ {
+				if i > 0 {
+					arg(x, i) // first argument already evaluated
+				}
+				check.assignment(x, nil, "argument to "+predeclaredFuncs[id].name)
+				if x.mode == invalid {
+					// TODO(gri) "use" all arguments?
+					return
+				}
+				switch i {
+				case 0:
+					if !isPointer(x.typ) {
+						check.invalidArg(x.pos(), "%s is not a pointer", x)
+						return
+					}
+				case 1:
+					sig, ok := x.typ.(*Signature)
+					if !ok {
+						check.invalidArg(x.pos(), "%s is not a function", x)
+						return
+					}
+					if sig.Params().Len() != 1 || sig.Results().Len() != 0 {
+						check.invalidArg(x.pos(), "expect 1 parameter and 0 result for function, but found %d and %d", sig.Params().Len(), sig.Results().Len())
+						return
+					}
+					if sig.Params().At(0).Type().String() != "u32" {
+						check.invalidArg(x.pos(), "expect u32 as parameter for function, but found %s", sig.Params().At(0).Type().String())
+						return
+					}
+				}
+				params[i] = x.typ
+			}
+		}
+		x.mode = novalue
+		if check.Types != nil {
+			check.recordBuiltinType(call.Fun, makeSig(nil, params...))
+		}
+
 	case _Printf:
 		S := x.typ
 		if s, _ := S.Underlying().(*Basic); s == nil || (s.kind != String && s.kind != UntypedString) {
@@ -689,7 +753,12 @@ func (check *Checker) builtin(x *operand, call *ast.CallExpr, id builtinId) (_ b
 		}
 		var t operand
 		x1 := x
-		for _, arg := range call.Args {
+		for i, arg := range call.Args {
+			if x := check.tryFixOperatorCall(arg); x != nil {
+				call.Args[i] = x
+				arg = x
+			}
+
 			check.rawExpr(x1, arg, nil) // permit trace for types, e.g.: new(trace(T))
 			check.dump("%v: %s", x1.pos(), x1)
 			x1 = &t // use incoming x only for first argument

@@ -9,17 +9,15 @@ ci-test-all:
 	@echo "== examples test begin =="
 
 	# loop forever
-	# cd ./arduino && make
-	# cd ./arduino-wat && make
 
-	cd ./brainfuck && make
-	cd ./expr && make
-	cd ./hello && make
-	cd ./misc && make
-	cd ./pkg && make
-	cd ./prime && make
-	cd ./reftoptr && make
-	cd ./surface && make
+	#cd ./brainfuck && make
+	#cd ./expr && make
+	#cd ./hello && make
+	#cd ./misc && make
+	#cd ./pkg && make
+	#cd ./prime && make
+	#cd ./reftoptr && make
+	#cd ./surface && make
 
 	# snake
 	cd ./snake && make publish

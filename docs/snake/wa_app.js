@@ -2,83 +2,34 @@
   class WaApp {
     constructor() {
       this._inst = null;
-      this._wa_print_buf = "";
     }
 
     init(url) {
       let app = this;
       let importsObject = {
-        wasi_snapshot_preview1: new function () {
-            this.args_get = () => { return 0; }
-            this.args_sizes_get = () => { return 0; }
-
-			this.clock_res_get = () => { return 0; }
-			this.clock_time_get = () => { return 0; }
-			this.environ_get = () => { return 0; }
-			this.environ_sizes_get = () => { return 0; }
-
-			this.fd_advise = () => { return 0; }
-			this.fd_allocate = () => { return 0; }
-			this.fd_close = () => { return 0; }
-			this.fd_datasync = () => { return 0; }
-			this.fd_fdstat_get = () => { return 0; }
-			this.fd_fdstat_set_flags = () => { return 0; }
-			this.fd_fdstat_set_rights = () => { return 0; }
-			this.fd_filestat_get = () => { return 0; }
-			this.fd_filestat_set_size = () => { return 0; }
-			this.fd_filestat_set_times = () => { return 0; }
-			this.fd_pread = () => { return 0; }
-			this.fd_prestat_get = () => { return 0; }
-			this.fd_prestat_dir_name = () => { return 0; }
-			this.fd_pwrite = () => { return 0; }
-			this.fd_read = () => { return 0; }
-			this.fd_readdir = () => { return 0; }
-			this.fd_renumber = () => { return 0; }
-			this.fd_seek = () => { return 0; }
-			this.fd_sync = () => { return 0; }
-			this.fd_tell = () => { return 0; }
-			this.fd_write = () => { return 0; }
-			this.path_create_directory = () => { return 0; }
-			this.path_filestat_get = () => { return 0; }
-			this.path_filestat_set_times = () => { return 0; }
-			this.path_link = () => { return 0; }
-			this.path_open = () => { return 0; }
-			this.path_readlink = () => { return 0; }
-			this.path_remove_directory = () => { return 0; }
-			this.path_rename = () => { return 0; }
-			this.path_symlink = () => { return 0; }
-			this.path_unlink_file = () => { return 0; }
-			
-			this.poll_oneoff = () => { return 0; }
-			this.proc_exit = () => { return 0; }
-			this.random_get = () => { return 0; }
-			this.sched_yield = () => { return 0; }
-			this.sock_accept = () => { return 0; }
-			this.sock_recv = () => { return 0; }
-			this.sock_send = () => { return 0; }
-			this.sock_shutdown = () => { return 0; }
-        },
-        wa_js_env: new function () {
-          this.waPrintI32 = (i) => {
-            app._wa_print_buf += i
+        syscall_js: new function () {
+          this.print_bool = (b) => { console.log(b) },
+          this.print_u32 = (i) => { console.log(i) },
+          this.print_i32 = (i) => { console.log(i) },
+          this.print_u64 = (i) => { console.log(i) },
+          this.print_u64 = (i) => { console.log(i) },
+          this.print_i64 = (i) => { console.log(i) },
+          this.print_f32 = (f) => { console.log(f) },
+          this.print_f64 = (f) => { console.log(f) },
+          this.print_ptr = (p) => {  console.log(p) },
+          this.print_str = (d, l) => {
+            const mem = app._inst.exports.memory;
+            const mem_view = new DataView(mem.buffer, d, l);
+            const s = new TextDecoder("utf-8").decode(mem_view);
+            console.log(s);
           }
-
-          this.waPrintRune = (c) => {
+          this.proc_exit = (code) => { alert(code) },
+          this.print_rune = (c) => {
             let ch = String.fromCodePoint(c);
-            if (ch == '\n') {
-              console.log(app._wa_print_buf);
-              app._wa_print_buf = "";
-            }
-            else {
-              app._wa_print_buf += ch
-            }
+            console.log(ch)
           }
-
-          this.waPuts = (prt, len) => {
-            let s = app.getString(prt, len);
-            app._wa_print_buf += s
-          }
-
+        },
+        snake_game: new function () {
           this.rand = (m) => {
             return parseInt(Math.random() * m)
           }
@@ -102,20 +53,20 @@
 
             function onMouseDown(ev) {
               let pt = getPointOnCanvas(ev.clientX, ev.clientY);
-              app._inst.exports['snake$canvas.OnMouseDown'](canvas.id, pt.x, pt.y);
+              app._inst.exports['snake.Canvas_OnMouseDown'](canvas.id, pt.x, pt.y);
             }
 
             function onMouseUp(ev) {
               let pt = getPointOnCanvas(ev.clientX, ev.clientY);
-              app._inst.exports['snake$canvas.OnMouseUp'](canvas.id, pt.x, pt.y);
+              app._inst.exports['snake.Canvas_OnMouseUp'](canvas.id, pt.x, pt.y);
             }
 
             function onKeyDown(ev) {
-              app._inst.exports['snake$canvas.OnKeyDown'](canvas.id, ev.keyCode);
+              app._inst.exports['snake.Canvas_OnKeyDown'](canvas.id, ev.keyCode);
             }
 
             function onKeyUp(ev) {
-              app._inst.exports['snake$canvas.OnKeyUp'](canvas.id, ev.keyCode);
+              app._inst.exports['snake.Canvas_OnKeyUp'](canvas.id, ev.keyCode);
             }
 
             if (IS_MOBILE) {
@@ -151,6 +102,7 @@
       WebAssembly.instantiateStreaming(fetch(url), importsObject).then(res => {
         this._inst = res.instance;
         this._inst.exports._start();
+        this._inst.exports['snake.main']();
         const timer = setInterval(gameLoop, 150);
       })
     }

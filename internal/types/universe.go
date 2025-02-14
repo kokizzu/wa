@@ -22,10 +22,17 @@ var Universe *Scope
 var Unsafe *Package
 
 var (
-	universeIota *Const
-	universeByte *Basic // uint8 alias, but has name "byte"
-	universeRune *Basic // int32 alias, but has name "rune"
-	universeAny  Object
+	universeIota   *Const
+	universeByte   *Basic // uint8 alias, but has name "byte"
+	universeRune   *Basic // int32 alias, but has name "rune"
+	universeString *Basic
+	universeAny    Object
+
+	universe__PACKAGE__ *Const
+	universe__FILE__    *Const
+	universe__LINE__    *Const
+	universe__COLUMN__  *Const
+	universe__FUNC__    *Const
 )
 
 // Typ contains the predeclared *Basic types indexed by their
@@ -123,6 +130,12 @@ var predeclaredConsts = [...]struct {
 	{"true", UntypedBool, constant.MakeBool(true)},
 	{"false", UntypedBool, constant.MakeBool(false)},
 	{"iota", UntypedInt, constant.MakeInt64(0)},
+
+	{"__PACKAGE__", UntypedString, constant.MakeString("<wa-lang:__PACKAGE__>")},
+	{"__FILE__", UntypedString, constant.MakeString("<wa-lang:__FILE__>")},
+	{"__LINE__", UntypedInt, constant.MakeInt64(0)},
+	{"__COLUMN__", UntypedInt, constant.MakeInt64(0)},
+	{"__FUNC__", UntypedString, constant.MakeString("")},
 }
 
 func defPredeclaredConsts() {
@@ -156,6 +169,8 @@ const (
 	_Recover
 
 	// wa
+	_Raw
+	_SetFinalizer
 	_Printf
 
 	// wz
@@ -192,7 +207,9 @@ var predeclaredFuncs = [...]struct {
 	_Real:    {"real", 1, false, expression},
 	_Recover: {"recover", 0, false, statement},
 
-	_Printf: {"printf", 1, true, statement},
+	_Raw:          {"raw", 1, false, expression},
+	_SetFinalizer: {"setFinalizer", 2, false, statement},
+	_Printf:       {"printf", 1, true, statement},
 
 	_长: {"长", 1, false, expression},
 
@@ -238,7 +255,14 @@ func init() {
 	universeIota = Universe.Lookup("iota").(*Const)
 	universeByte = Universe.Lookup("byte").(*TypeName).typ.(*Basic)
 	universeRune = Universe.Lookup("rune").(*TypeName).typ.(*Basic)
+	universeString = Universe.Lookup("string").(*TypeName).typ.(*Basic)
 	universeAny = Universe.Lookup("any")
+
+	universe__PACKAGE__ = Universe.Lookup("__PACKAGE__").(*Const)
+	universe__FILE__ = Universe.Lookup("__FILE__").(*Const)
+	universe__LINE__ = Universe.Lookup("__LINE__").(*Const)
+	universe__COLUMN__ = Universe.Lookup("__COLUMN__").(*Const)
+	universe__FUNC__ = Universe.Lookup("__FUNC__").(*Const)
 }
 
 // Objects with names containing blanks are internal and not entered into

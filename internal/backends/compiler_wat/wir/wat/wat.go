@@ -91,6 +91,7 @@ const (
 	OpCodeGt
 	OpCodeLe
 	OpCodeGe
+	OpCodeComp
 	OpCodeAnd
 	OpCodeOr
 	OpCodeXor
@@ -119,4 +120,5 @@ type Global struct {
 	V         Value
 	IsMut     bool
 	InitValue string
+	NameExp   string
 }

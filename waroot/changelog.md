@@ -1,6 +1,80 @@
 # 版本日志
 
 - (dev)
+  - Native 后端 (TODO)
+  - 完善 `wa lsp` 子命令 (TODO)
+- v0.21.0 (2025-02-11)
+  - WA酱吉祥物诞生: https://wa-lang.org/smalltalk/st0069.html
+  - 导出函数使用Bytes外的纯值切片作为参数或返回值时，以值拷贝模式生成js胶水代码
+  - wasm 支持 `memory.fill` 和 `memory.copy` 指令
+  - 优化底层内存管理`malloc`函数的实现
+- v0.20.0 (2025-01-12)
+  - 补充带文字 logo
+  - 种子案例: 实验性支持Dora SSR游戏开发: https://github.com/IppClub/dora-wa
+  - 支持 github action 自动化构建: https://github.com/wa-lang/setup-wa
+  - 修复方法重载处理问题, 支持链式调用
+  - 修复 wa fmt 对匿名结构体成员格式化的问题
+  - 完善 println 打印复数
+  - 完善wat2c子命令
+- v0.19.0 (2024-11-11)
+  - 实现 `defer` 延迟执行函数的特性
+  - 实现复数类型
+- v0.18.0 (2024-11-01)
+  - 实现 key 有序的 `map` 特性, 删除比较运算符重载特性(v0.12.0引入)
+  - 实验性支持 `wat2c` 命令
+- v0.17.0 (2024-10-08)
+  - 恢复 Arduino Nano 33 支持
+  - 预定义常量统一用大写字母, 并增加 `__COLUMN__` 常量
+  - `wa build` 和 `wa run` 增加 `-optimize` 优化参数, 优化后输出体积大约为原来的 1/3 到 1/4
+  - 优化 `wa run` 默认行为, 只有 wasi 默认命令行执行
+  - 实验性增加 Chrome 内置 AI 支持
+- v0.16.0 (2024-09-16)
+  - “国产语言论坛”被动关闭: ~~https://zh-lang.osanswer.net~~
+  - 增加 `__package__`/`__FILE__`/`__LINE__`/`__func__` 预定义常量, 表示当前位置信息
+  - 完善 wasm4 游戏支持, 增加俄罗斯方块/pong/life等多个游戏, 并提供在线试玩页面
+  - 重构 `syscall` 部分子包和文档
+- v0.15.0 (2024-08-25)
+  - 增加 wasm4 游戏平台支持
+  - Playground 依赖的 `wa.wasm` 编译环境升级到 Go1.21 (兼顾 wasip1 编译)
+  - 调整凹语言程序目录结构, `vendor` 改为 `pkg/vendor`, 增加 `pkg/std` 目录为可选标准库
+  - `wa` 命令瘦身: 删除 wabt 工具和 `-wabt` 参数, 去掉 `wa run-wasm` 子命令
+  - 删除 `WAROOT` 环境变量, 凹语言始终以单个 `wa` 命令程序简化安装
+- v0.14.0 (2024-08-01)
+  - 后端重新实现 wat 到 wasm 的转换工具并默认启用; run/build 临时增加 `-wabt=false` 参数
+  - 简化 `wa run`, 优先命令行执行, 并增加 `-web` 参数
+  - 修复 js 胶水代码的错误
+- v0.13.0 (2024-06-21)
+  - 增加 docker 镜像发布, 支持 devcontainer 开发环境
+  - 增加 wasm 版本命令行工具链打包
+  - 增加 `<=>` 运算符, 简化运算符重载特性
+  - 修复指针调用不支持重载方法的问题
+  - 试验性增加 lsp 子命令
+  - 完善 gpu 包
+- v0.12.0 (2024-04-20)
+  - `const` 常量增加 `embed` 实验特性
+  - 完善函数重载和运算符重载功能, 完善胶水代码
+  - 简化 p5 API接口
+- v0.11.0 (2024-04-13)
+  - 完善 `math/{Sin,Cos,Sqrt}` 等 API
+  - 增加 `math/vector`/`math/matrix`/`net` 标准库
+  - 实验性增加运算符重载功能
+- v0.10.0 (2024-03-29)
+  - 补充基本类型读写胶水
+  - 修正 I64、U64 不应导出等一些错误
+  - 实验性引入全局函数和方法的重载功能
+- v0.9.2 (2024-03-04) MVP
+  - 完善 `js/p5` 包, 增加键盘事件处理, 改用凹语言原生绘图
+  - `wa init` 增加 `-p5` 参数
+- v0.9.1 (2024-02-14) MVP
+  - 增加 `js/p5` 包, 支持 P5 儿童编程
+  - 增加放大镜例子
+- v0.9.0 (2023-12-15) MVP
+  - 增加胶水代码定义特性
+  - 添加 js、js/cancas 标准库
+  - 增加 logo、mandelbrot、life、qrcode 等例子
+  - 去掉 LLVM 后端支持, CPU 只支持 wasm 类型, 删除 Clang 和 Arduino 支持
+  - 标准库增加 qrcode
+  - 默认目标 OS 改为 js
 - v0.8.1 (2023-08-11) MVP
   - MVP 版本, 细节请参考《凹语言手册》：https://wa-lang.org/man
 - v0.7.0 (2023-05-27)
