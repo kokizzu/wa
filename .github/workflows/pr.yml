@@ -13,5 +13,4 @@ jobs:
     - uses: superbrothers/close-pull-request@v3
       with:
         # Optional. Post a issue comment just before closing a pull request.
-        comment: "这里是镜像仓库, 不接受 PR, 请移步 https://gitee.com/wa-lang"
-
+        comment: "这里是镜像仓库, 不接受 PR, 请移步 https://gitcode.com/wa-lang/wa"

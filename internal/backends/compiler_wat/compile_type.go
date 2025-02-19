@@ -21,6 +21,8 @@ type typeLib struct {
 
 	anonStructCount    int
 	anonInterfaceCount int
+
+	MaxTypeSize int
 }
 
 func newTypeLib(m *wir.Module, prog *loader.Program) *typeLib {
@@ -38,12 +40,13 @@ func (tLib *typeLib) find(v types.Type) wir.ValueType {
 }
 
 func (tLib *typeLib) compile(from types.Type) wir.ValueType {
-	if v, ok := tLib.typeTable[from.String()]; ok {
+	from_name := from.String()
+	if v, ok := tLib.typeTable[from_name]; ok {
 		return *v
 	}
 
 	var newType wir.ValueType
-	tLib.typeTable[from.String()] = &newType
+	tLib.typeTable[from_name] = &newType
 	uncommanFlag := false
 
 	switch t := from.(type) {
@@ -86,6 +89,12 @@ func (tLib *typeLib) compile(from types.Type) wir.ValueType {
 		case types.Float64, types.UntypedFloat:
 			newType = tLib.module.F64
 
+		case types.Complex64:
+			newType = tLib.module.COMPLEX64
+
+		case types.Complex128:
+			newType = tLib.module.COMPLEX128
+
 		case types.Uint:
 			newType = tLib.module.UINT
 
@@ -120,7 +129,9 @@ func (tLib *typeLib) compile(from types.Type) wir.ValueType {
 		}
 
 	case *types.Pointer:
+		delete(tLib.typeTable, from_name)
 		newType = tLib.module.GenValueType_Ref(tLib.compile(t.Elem()))
+		tLib.typeTable[from_name] = &newType
 		uncommanFlag = true
 
 	case *types.Array:
@@ -128,6 +139,13 @@ func (tLib *typeLib) compile(from types.Type) wir.ValueType {
 
 	case *types.Slice:
 		newType = tLib.module.GenValueType_Slice(tLib.compile(t.Elem()), "")
+
+	case *types.Map:
+		ei, ok := tLib.typeTable["interface{}"]
+		if !ok {
+			logger.Fatal("Can't find interface{} for map_imp.")
+		}
+		newType = tLib.module.GenValueType_Map(tLib.compile(t.Key()), tLib.compile(t.Elem()), "", *ei)
 
 	case *types.Signature:
 		newType = tLib.module.GenValueType_Closure(tLib.GenFnSig(t))
@@ -224,6 +242,12 @@ func (tLib *typeLib) compile(from types.Type) wir.ValueType {
 			case types.Float64, types.UntypedFloat:
 				newType = tLib.module.GenValueType_f64(type_name)
 
+			case types.Complex64:
+				newType = tLib.module.GenValueType_complex64(type_name)
+
+			case types.Complex128:
+				newType = tLib.module.GenValueType_complex128(type_name)
+
 			case types.Uint:
 				newType = tLib.module.GenValueType_uint(type_name)
 
@@ -243,6 +267,13 @@ func (tLib *typeLib) compile(from types.Type) wir.ValueType {
 
 		case *types.Slice:
 			newType = tLib.module.GenValueType_Slice(tLib.compile(ut.Elem()), type_name)
+
+		case *types.Map:
+			ei, ok := tLib.typeTable["interface{}"]
+			if !ok {
+				logger.Fatal("Can't find interface{} for map_imp.")
+			}
+			newType = tLib.module.GenValueType_Map(tLib.compile(ut.Key()), tLib.compile(ut.Elem()), type_name, *ei)
 
 		case *types.Struct:
 			tStruct, found := tLib.module.GenValueType_Struct(type_name)
@@ -306,10 +337,15 @@ func (tLib *typeLib) compile(from types.Type) wir.ValueType {
 			var method wir.Method
 			method.Sig = tLib.GenFnSig(mfn.Signature)
 			method.Name = mfn.Name()
-			method.FullFnName, _ = wir.GetFnMangleName(mfn)
+			method.FullFnName, _ = wir.GetFnMangleName(mfn, tLib.prog.Manifest.MainPkg)
 
 			newType.AddMethod(method)
 		}
+	}
+
+	tsize := newType.Size()
+	if tsize > tLib.MaxTypeSize {
+		tLib.MaxTypeSize = tsize
 	}
 
 	return newType

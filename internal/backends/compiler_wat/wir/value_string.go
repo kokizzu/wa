@@ -57,12 +57,16 @@ func (m *Module) GenValueType_string(name string) *String {
 func (t *String) Size() int              { return t.underlying.Size() }
 func (t *String) align() int             { return t.underlying.align() }
 func (t *String) Kind() TypeKind         { return kString }
-func (t *String) onFree() int            { return t.underlying.onFree() }
+func (t *String) OnFree() int            { return t.underlying.OnFree() }
 func (t *String) Raw() []wat.ValueType   { return t.underlying.Raw() }
 func (t *String) Equal(u ValueType) bool { _, ok := u.(*String); return ok }
 
 func (t *String) EmitLoadFromAddr(addr Value, offset int) []wat.Inst {
 	return t.underlying.EmitLoadFromAddr(addr, offset)
+}
+
+func (t *String) EmitLoadFromAddrNoRetain(addr Value, offset int) []wat.Inst {
+	return t.underlying.EmitLoadFromAddrNoRetain(addr, offset)
 }
 
 func (t *String) genFunc_append(m *Module) string {
@@ -109,10 +113,10 @@ func (t *String) genFunc_append(m *Module) string {
 		//gen new string
 		f.Insts = append(f.Insts, t._u8_block.emitHeapAlloc(new_len)...) //block
 
-		f.Insts = append(f.Insts, wat.NewInstCall("$wa.runtime.DupI32"))
+		f.Insts = append(f.Insts, wat.NewInstCall("runtime.DupI32"))
 		f.Insts = append(f.Insts, NewConst("16", t._u32).EmitPush()...)
 		f.Insts = append(f.Insts, wat.NewInstAdd(wat.U32{})) //data
-		f.Insts = append(f.Insts, wat.NewInstCall("$wa.runtime.DupI32"))
+		f.Insts = append(f.Insts, wat.NewInstCall("runtime.DupI32"))
 		f.Insts = append(f.Insts, dest.EmitPop()...)     //dest
 		f.Insts = append(f.Insts, new_len.EmitPush()...) //len
 
@@ -300,10 +304,6 @@ func newValue_String(name string, kind ValueKind, typ *String) *aString {
 
 func (v *aString) Type() ValueType { return v.typ }
 
-func (v *aString) emitStoreToAddr(addr Value, offset int) []wat.Inst {
-	return v.aStruct.emitStoreToAddr(addr, offset)
-}
-
 func (v *aString) emitSub(low, high Value) (insts []wat.Inst) {
 	//block
 	insts = append(insts, v.ExtractByName("b").EmitPush()...)
@@ -378,6 +378,18 @@ func (v *aString) emitEq(r Value) (insts []wat.Inst, ok bool) {
 	insts = append(insts, wat.NewInstCall(v.typ.fnName_equal))
 
 	ok = true
+
+	return
+}
+
+func (v *aString) emitCompare(r Value) (insts []wat.Inst) {
+	if !v.Type().Equal(r.Type()) {
+		logger.Fatal("v.Type() != r.Type()")
+	}
+
+	insts = append(insts, v.EmitPushNoRetain()...)
+	insts = append(insts, r.EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstCall("$wa.runtime.string_Comp"))
 
 	return
 }

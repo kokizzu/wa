@@ -2,6 +2,10 @@
 
 package config
 
+import (
+	wasrc "wa-lang.org/wa/waroot/src"
+)
+
 // wa 代码:
 // xxx.wa
 // xxx_$OS.wa
@@ -22,64 +26,38 @@ package config
 
 // 编译器后端类型
 const (
-	WaBackend_Default = WaBackend_wat // 默认
+	WaBackend_Default = wasrc.WaBackend_wat // 默认
 
-	WaBackend_clang = "clang" // 输出 c
-	WaBackend_llvm  = "llvm"  // 输出 llir
-	WaBackend_wat   = "wat"   // 输出 wat
+	WaBackend_wat = wasrc.WaBackend_wat // 输出 wat
 )
 
 // 目标平台类型, 可管理后缀名
 const (
-	WaOS_Default = WaOS_wasi // 默认
+	WaOS_Default = wasrc.WaOS_js // 默认
 
-	WaOS_arduino = "arduino" // Arduino 平台
-	WaOS_chrome  = "chrome"  // Chrome 浏览器
-	WaOS_wasi    = "wasi"    // WASI 接口
-	WaOS_mvp     = "mvp"     // MVP 接口, 最小可用
+	WaOS_js      = wasrc.WaOS_js      // 浏览器 JS
+	WaOS_wasi    = wasrc.WaOS_wasi    // WASI 接口
+	WaOS_wasm4   = wasrc.WaOS_wasm4   // WASM4 接口
+	WaOS_arduino = wasrc.WaOS_arduino // Arduino
+	WaOS_unknown = wasrc.WaOS_unknown // Unknown
 )
 
 // 体系结构类型
 const (
-	WaArch_Default = WaArch_wasm // 默认
-
-	WaArch_386     = "386"     // 386 平台
-	WaArch_amd64   = "amd64"   // amd64 平台
-	WaArch_arm64   = "arm64"   // arm64 平台
-	WaArch_riscv64 = "riscv64" // riscv64 平台
-	WaArch_wasm    = "wasm"    // wasm 平台
+	WaArch_Default = wasrc.WaArch_wasm // 默认
+	WaArch_wasm    = wasrc.WaArch_wasm // wasm 平台
 )
 
 // 后端列表
-var WaBackend_List = []string{
-	WaBackend_clang,
-	WaBackend_llvm,
-	WaBackend_wat,
-}
+var WaBackend_List = wasrc.WaBackend_List
 
 // OS 列表
-var WaOS_List = []string{
-	WaOS_arduino,
-	WaOS_chrome,
-	WaOS_wasi,
-	WaOS_mvp,
-}
+var WaOS_List = wasrc.WaOS_List
 
 // CPU 列表
-var WaArch_List = []string{
-	WaArch_386,
-	WaArch_amd64,
-	WaArch_arm64,
-	WaArch_riscv64,
-	WaArch_wasm,
-}
+var WaArch_List = wasrc.WaArch_List
 
 // 检查 OS 值是否 OK
 func CheckWaOS(os string) bool {
-	for _, x := range WaOS_List {
-		if x == os {
-			return true
-		}
-	}
-	return false
+	return wasrc.CheckWaOS(os)
 }

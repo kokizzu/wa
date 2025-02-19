@@ -47,7 +47,6 @@ func walkDeclList(v Visitor, list []Decl) {
 // v.Visit(node) is not nil, Walk is invoked recursively with visitor
 // w for each of the non-nil children of node, followed by a call of
 // w.Visit(nil).
-//
 func Walk(v Visitor, node Node) {
 	if v = v.Visit(node); v == nil {
 		return
@@ -113,6 +112,12 @@ func Walk(v Visitor, node Node) {
 	case *IndexExpr:
 		Walk(v, n.X)
 		Walk(v, n.Index)
+
+	case *IndexListExpr:
+		Walk(v, n.X)
+		for _, index := range n.Indices {
+			Walk(v, index)
+		}
 
 	case *SliceExpr:
 		Walk(v, n.X)
@@ -367,7 +372,6 @@ func (f inspector) Visit(node Node) Visitor {
 // f(node); node must not be nil. If f returns true, Inspect invokes f
 // recursively for each of the non-nil children of node, followed by a
 // call of f(nil).
-//
 func Inspect(node Node, f func(Node) bool) {
 	Walk(inspector(f), node)
 }

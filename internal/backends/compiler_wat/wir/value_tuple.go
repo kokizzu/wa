@@ -43,7 +43,7 @@ func (m *Module) GenValueType_Tuple(fields []ValueType) *Tuple {
 func (t *Tuple) Size() int            { return t.underlying.Size() }
 func (t *Tuple) align() int           { return t.underlying.align() }
 func (t *Tuple) Kind() TypeKind       { return kTuple }
-func (t *Tuple) onFree() int          { return t.underlying.onFree() }
+func (t *Tuple) OnFree() int          { return t.underlying.OnFree() }
 func (t *Tuple) Raw() []wat.ValueType { return t.underlying.Raw() }
 func (t *Tuple) Equal(u ValueType) bool {
 	ut, ok := u.(*Tuple)
@@ -68,6 +68,10 @@ func (t *Tuple) EmitLoadFromAddr(addr Value, offset int) []wat.Inst {
 	return t.underlying.EmitLoadFromAddr(addr, offset)
 }
 
+func (t *Tuple) EmitLoadFromAddrNoRetain(addr Value, offset int) []wat.Inst {
+	return t.underlying.EmitLoadFromAddrNoRetain(addr, offset)
+}
+
 /**************************************
 aTuple:
 **************************************/
@@ -90,7 +94,3 @@ func (v *aTuple) EmitInit() []wat.Inst    { return v.aStruct.EmitInit() }
 func (v *aTuple) EmitPush() []wat.Inst    { return v.aStruct.EmitPush() }
 func (v *aTuple) EmitPop() []wat.Inst     { return v.aStruct.EmitPop() }
 func (v *aTuple) EmitRelease() []wat.Inst { return v.aStruct.EmitRelease() }
-
-func (v *aTuple) emitStoreToAddr(addr Value, offset int) []wat.Inst {
-	return v.aStruct.emitStoreToAddr(addr, offset)
-}

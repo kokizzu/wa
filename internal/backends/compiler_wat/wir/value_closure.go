@@ -88,7 +88,7 @@ func (m *Module) GenValueType_Closure(sig FnSig) *Closure {
 func (t *Closure) Size() int            { return t.underlying.Size() }
 func (t *Closure) align() int           { return t.underlying.align() }
 func (t *Closure) Kind() TypeKind       { return kStruct }
-func (t *Closure) onFree() int          { return t.underlying.onFree() }
+func (t *Closure) OnFree() int          { return t.underlying.OnFree() }
 func (t *Closure) Raw() []wat.ValueType { return t.underlying.Raw() }
 
 func (t *Closure) Equal(u ValueType) bool {
@@ -99,15 +99,19 @@ func (t *Closure) Equal(u ValueType) bool {
 }
 
 func (t *Closure) EmitLoadFromAddr(addr Value, offset int) []wat.Inst {
-	//if !addr.Type().(*Ptr).Base.Equal(t) {
-	//	logger.Fatal("Type not match")
-	//	return nil
-	//}
 	if _, ok := addr.(*aPtr); !ok {
 		logger.Fatal("addr should be `*aPtr`")
 	}
 
 	return t.underlying.EmitLoadFromAddr(addr, offset)
+}
+
+func (t *Closure) EmitLoadFromAddrNoRetain(addr Value, offset int) []wat.Inst {
+	if _, ok := addr.(*aPtr); !ok {
+		logger.Fatal("addr should be `*aPtr`")
+	}
+
+	return t.underlying.EmitLoadFromAddrNoRetain(addr, offset)
 }
 
 /**************************************
@@ -142,9 +146,9 @@ func EmitCallClosure(c Value, params []Value) (insts []wat.Inst) {
 		insts = append(insts, p.EmitPushNoRetain()...)
 	}
 	closure := c.(*aClosure)
-	insts = append(insts, closure.ExtractByName("fn_index").EmitPushNoRetain()...)
+	insts = append(insts, closure.ExtractByName("fn_index").EmitPush()...)
 
-	insts = append(insts, closure.ExtractByName("d").EmitPush()...)
+	insts = append(insts, closure.ExtractByName("d").(*aRef).ExtractByName("d").EmitPushNoRetain()...)
 	insts = append(insts, currentModule.FindGlobalByName("$wa.runtime.closure_data").EmitPop()...)
 
 	insts = append(insts, wat.NewInstCallIndirect(closure.typ._fnTypeName))
@@ -166,4 +170,13 @@ func (v *aClosure) emitEq(r Value) ([]wat.Inst, bool) {
 		logger.Fatal("fn_index is not comparable")
 	}
 	return insts, ok
+}
+
+func (v *aClosure) emitCompare(r Value) (insts []wat.Inst) {
+	if !v.Type().Equal(r.Type()) {
+		logger.Fatal("v.Type() != r.Type()")
+	}
+	d := r.(*aClosure)
+
+	return v.aStruct.emitCompare(&d.aStruct)
 }

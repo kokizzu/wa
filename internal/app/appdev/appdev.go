@@ -12,18 +12,22 @@ import (
 	"wa-lang.org/wa/api"
 	"wa-lang.org/wa/internal/3rdparty/cli"
 	"wa-lang.org/wa/internal/config"
+	"wa-lang.org/wa/internal/waroot/malloc"
 )
 
 var CmdDev = &cli.Command{
 	Hidden: true,
-	Name:   "debug",
+	Name:   "dev",
 	Usage:  "only for dev/debug",
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
-			Name:  "hello",
+			Name: "hello",
 		},
 		&cli.BoolFlag{
-			Name:  "count-code-lines",
+			Name: "malloc",
+		},
+		&cli.BoolFlag{
+			Name: "count-code-lines",
 		},
 	},
 	Action: func(c *cli.Context) error {
@@ -33,7 +37,7 @@ var CmdDev = &cli.Command{
 		}
 
 		if c.Bool("hello") {
-			wat, err := api.BuildFile(
+			_, wat, err := api.BuildFile(
 				config.DefaultConfig(),
 				"hello.wa", "func main() { println(123) }",
 			)
@@ -45,6 +49,34 @@ var CmdDev = &cli.Command{
 				os.Exit(1)
 			}
 			fmt.Println(string(wat))
+			os.Exit(0)
+		}
+
+		if c.Bool("malloc") {
+			h := malloc.NewHeap(&malloc.Config{
+				MemoryPages:    1,
+				MemoryPagesMax: 2,
+				StackPtr:       100,
+				HeapBase:       1000,
+				HeapLFixedCap:  3,
+			})
+
+			os.WriteFile("a.out-0.wasm", []byte(h.WasmBytes()), 0666)
+
+			os.WriteFile("a.out-0.dot", []byte(h.DotString()), 0666)
+
+			// 需要页扩展时失败
+			p1 := h.Malloc(65536 - 10) // (malloc.KPageBytes)
+			os.WriteFile("a.out-1.dot", []byte(h.DotString()), 0666)
+			fmt.Println("p1:", p1)
+			h.Free(p1)
+
+			os.WriteFile("a.out-2.dot", []byte(h.DotString()), 0666)
+
+			p2 := h.Malloc(malloc.KPageBytes)
+			os.WriteFile("a.out-2.dot", []byte(h.DotString()), 0666)
+			fmt.Println("p2:", p2)
+
 			os.Exit(0)
 		}
 

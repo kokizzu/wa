@@ -1,0 +1,12 @@
+// 版权 @2024 mapx 作者。保留所有权利。
+
+import "rbtree/mapx"
+
+func main {
+	m := mapx.MakeMap()
+	m.Update("three", 3)
+	m.Update("one", 1)
+	//m.Update("two", 2)
+
+	m.Dump()
+}

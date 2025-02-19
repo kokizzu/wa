@@ -81,6 +81,11 @@ func (check *Checker) op(m opPredicates, x *operand, op token.Token) bool {
 
 // The unary expression e may be nil. It's passed in for better error messages only.
 func (check *Checker) unary(x *operand, e *ast.UnaryExpr, op token.Token) {
+	check.expr(x, e.X)
+	if x.mode == invalid {
+		return
+	}
+
 	switch op {
 	case token.AND:
 		// spec: "As an exception to the addressability
@@ -130,6 +135,8 @@ func isComparison(op token.Token) bool {
 	// Note: tokens are not ordered well to make this much easier
 	switch op {
 	case token.EQL, token.NEQ, token.LSS, token.LEQ, token.GTR, token.GEQ:
+		return true
+	case token.SPACESHIP:
 		return true
 	}
 	return false
@@ -348,7 +355,6 @@ func (check *Checker) representable(x *operand, typ *Basic) {
 // Also, if x is a constant, it must be representable as a value of typ,
 // and if x is the (formerly untyped) lhs operand of a non-constant
 // shift, it must be an integer value.
-//
 func (check *Checker) updateExprType(x ast.Expr, typ Type, final bool) {
 	old, found := check.untyped[x]
 	if !found {
@@ -581,6 +587,8 @@ func (check *Checker) comparison(x, y *operand, op token.Token) {
 		case token.LSS, token.LEQ, token.GTR, token.GEQ:
 			// spec: The ordering operators <, <=, >, and >= apply to operands that are ordered."
 			defined = isOrdered(x.typ) && isOrdered(y.typ)
+		case token.SPACESHIP:
+			defined = isOrdered(x.typ) && isOrdered(y.typ)
 		default:
 			unreachable()
 		}
@@ -602,7 +610,11 @@ func (check *Checker) comparison(x, y *operand, op token.Token) {
 	}
 
 	if x.mode == constant_ && y.mode == constant_ {
-		x.val = constant.MakeBool(constant.Compare(x.val, op, y.val))
+		if op == token.SPACESHIP {
+			x.val = constant.MakeInt64(constant.CompareSpaceShip(x.val, y.val))
+		} else {
+			x.val = constant.MakeBool(constant.Compare(x.val, op, y.val))
+		}
 		// The operands are never materialized; no need to update
 		// their types.
 	} else {
@@ -613,6 +625,12 @@ func (check *Checker) comparison(x, y *operand, op token.Token) {
 		// is the respective default type.
 		check.updateExprType(x.expr, Default(x.typ), true)
 		check.updateExprType(y.expr, Default(y.typ), true)
+	}
+
+	// x <=> y, 返回 -1/0/1
+	if op == token.SPACESHIP {
+		x.typ = Typ[Int]
+		return
 	}
 
 	// spec: "Comparison operators compare two operands and yield
@@ -895,7 +913,6 @@ func (check *Checker) index(index ast.Expr, max int64) (i int64, valid bool) {
 // against the literal's element type (typ), and the element indices against
 // the literal length if known (length >= 0). It returns the length of the
 // literal (maximum index value + 1).
-//
 func (check *Checker) indexedElts(elts []ast.Expr, typ Type, length int64) int64 {
 	visited := make(map[int64]bool, len(elts))
 	var index, max int64
@@ -952,7 +969,6 @@ const (
 // rawExpr typechecks expression e and initializes x with the expression
 // value or type. If an error occurred, x.mode is set to invalid.
 // If hint != nil, it is the type of a composite literal element.
-//
 func (check *Checker) rawExpr(x *operand, e ast.Expr, hint Type) exprKind {
 	if trace {
 		check.trace(e.Pos(), "%s", e)
@@ -995,7 +1011,6 @@ func (check *Checker) rawExpr(x *operand, e ast.Expr, hint Type) exprKind {
 
 // exprInternal contains the core of type checking of expressions.
 // Must only be called by rawExpr.
-//
 func (check *Checker) exprInternal(x *operand, e ast.Expr, hint Type) exprKind {
 	// make sure x has a valid state in case of bailout
 	// (was issue 5770)
@@ -1024,18 +1039,20 @@ func (check *Checker) exprInternal(x *operand, e ast.Expr, hint Type) exprKind {
 
 	case *ast.FuncLit:
 		if sig, ok := check.typ(e.Type).(*Signature); ok {
-			// Anonymous functions are considered part of the
-			// init expression/func declaration which contains
-			// them: use existing package-level declaration info.
-			decl := check.decl // capture for use in closure below
-			iota := check.iota // capture for use in closure below (#22345)
-			// Don't type-check right away because the function may
-			// be part of a type definition to which the function
-			// body refers. Instead, type-check as soon as possible,
-			// but before the enclosing scope contents changes (#22992).
-			check.later(func() {
-				check.funcBody(decl, "<function literal>", sig, e.Body, iota)
-			})
+			if !check.context.ignoreFuncLitBody {
+				// Anonymous functions are considered part of the
+				// init expression/func declaration which contains
+				// them: use existing package-level declaration info.
+				decl := check.decl // capture for use in closure below
+				iota := check.iota // capture for use in closure below (#22345)
+				// Don't type-check right away because the function may
+				// be part of a type definition to which the function
+				// body refers. Instead, type-check as soon as possible,
+				// but before the enclosing scope contents changes (#22992).
+				check.later(func() {
+					check.funcBody(decl, "<function literal>", sig, e.Body, iota)
+				})
+			}
 			x.mode = value
 			x.typ = sig
 		} else {
@@ -1077,6 +1094,9 @@ func (check *Checker) exprInternal(x *operand, e ast.Expr, hint Type) exprKind {
 
 		switch utyp := base.Underlying().(type) {
 		case *Struct:
+			if true {
+				// todo(chai): check import type.NeesConstructor
+			}
 			if len(e.Elts) == 0 {
 				break
 			}
@@ -1248,6 +1268,10 @@ func (check *Checker) exprInternal(x *operand, e ast.Expr, hint Type) exprKind {
 		x.typ = typ
 
 	case *ast.ParenExpr:
+		if x := check.tryFixOperatorCall(e.X); x != nil {
+			e.X = x
+		}
+
 		kind := check.rawExpr(x, e.X, nil)
 		x.expr = e
 		return kind
@@ -1470,10 +1494,6 @@ func (check *Checker) exprInternal(x *operand, e ast.Expr, hint Type) exprKind {
 		}
 
 	case *ast.UnaryExpr:
-		check.expr(x, e.X)
-		if x.mode == invalid {
-			goto Error
-		}
 		check.unary(x, e, e.Op)
 		if x.mode == invalid {
 			goto Error
@@ -1568,7 +1588,6 @@ func (check *Checker) singleValue(x *operand) {
 // expr typechecks expression e and initializes x with the expression value.
 // The result must be a single value.
 // If an error occurred, x.mode is set to invalid.
-//
 func (check *Checker) expr(x *operand, e ast.Expr) {
 	check.multiExpr(x, e)
 	check.singleValue(x)
@@ -1595,7 +1614,6 @@ func (check *Checker) multiExpr(x *operand, e ast.Expr) {
 // exprWithHint typechecks expression e and initializes x with the expression value;
 // hint is the type of a composite literal element.
 // If an error occurred, x.mode is set to invalid.
-//
 func (check *Checker) exprWithHint(x *operand, e ast.Expr, hint Type) {
 	assert(hint != nil)
 	check.rawExpr(x, e, hint)
@@ -1617,7 +1635,6 @@ func (check *Checker) exprWithHint(x *operand, e ast.Expr, hint Type) {
 
 // exprOrType typechecks expression or type e and initializes x with the expression value or type.
 // If an error occurred, x.mode is set to invalid.
-//
 func (check *Checker) exprOrType(x *operand, e ast.Expr) {
 	check.rawExpr(x, e, nil)
 	check.singleValue(x)

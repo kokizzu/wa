@@ -4,7 +4,20 @@ import "snake/canvas"
 
 global ca: *canvas.Canvas
 
-type Position struct {
+func Canvas_OnMouseDown(id: u32, x, y: u32) {
+	canvas.OnMouseDown(id, x, y)
+}
+func Canvas_OnMouseUp(id: u32, x, y: u32) {
+	canvas.OnMouseUp(id, x, y)
+}
+func Canvas_OnKeyDown(id, key: u32) {
+	canvas.OnKeyDown(id, key)
+}
+func Canvas_OnKeyUp(id, key: u32) {
+	canvas.OnKeyUp(id, key)
+}
+
+type Position :struct {
 	x, y: i32
 }
 
@@ -28,7 +41,7 @@ const (
 
 global Dirs: [5]Position
 
-type GameState struct {
+type GameState :struct {
 	w, h:  i32
 	scale: i32
 	grid:  []u8
@@ -100,7 +113,7 @@ func GameState.SetGridType(p: Position, t: u8) {
 	}
 }
 
-#wa:import wa_js_env rand
+#wa:import snake_game rand
 func rand_JS(_: i32) => i32
 func GameState.GenFood() => Position {
 	p: Position
@@ -174,6 +187,7 @@ func Step() {
 }
 
 func main {
+	println("snake game run")
 	gameState.Init(32, 32, 10)
 	gameState.Start()
 }

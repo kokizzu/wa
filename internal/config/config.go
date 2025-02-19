@@ -3,8 +3,12 @@
 package config
 
 import (
+	"bytes"
 	"io/fs"
 	"os"
+	"path/filepath"
+
+	"wa-lang.org/wa/internal/version"
 )
 
 // 字长和指针大小
@@ -22,11 +26,9 @@ type PkgVFS struct {
 
 // 通用配置信息
 type Config struct {
+	Target    string   // 目标平台
 	WatOutput string   // 输出的 wat 文件路径
 	WaBackend string   // 编译器后端
-	WaRoot    string   // 凹 程序根目录, src 目录下是包代码, 为空时用内置标准库实现
-	WaArch    string   // 目标 CPU
-	WaOS      string   // 目标 OS
 	WaSizes   StdSizes // 指针大小
 	BuilgTags []string // 条件编译的标志
 	UnitTest  bool     // 单元测试模式
@@ -53,25 +55,25 @@ func DefaultConfig() *Config {
 		p.WaBackend = WaBackend_Default
 	}
 
-	if p.WaArch == "" {
-		if s := os.Getenv("WAARCH"); s != "" {
-			p.WaArch = s
-		} else {
-			p.WaArch = WaArch_Default
-		}
-	}
-	if p.WaOS == "" {
-		if s := os.Getenv("WAOS"); s != "" {
-			p.WaOS = s
-		} else {
-			p.WaOS = WaOS_Default
-		}
-	}
-	if p.WaRoot == "" {
-		if s := os.Getenv("WAROOT"); s != "" {
-			p.WaRoot = s
-		}
+	return p
+}
+
+// Waroot 是否有效
+// 需要保持和 waroot 处理一致
+func isWarootValid() (warootDir string, ok bool) {
+	if s, _ := os.UserHomeDir(); s != "" {
+		warootDir = filepath.Join(s, "wa")
 	}
 
-	return p
+	d, err := os.ReadFile(filepath.Join(warootDir, "VERSION"))
+	if err != nil {
+		return "", false
+	}
+
+	ver := string(bytes.TrimSpace(d))
+	if ver != version.Version {
+		return "", false
+	}
+
+	return warootDir, true
 }

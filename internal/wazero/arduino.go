@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"wa-lang.org/wa/internal/3rdparty/wazero"
+	"wa-lang.org/wa/internal/3rdparty/wazero/api"
 	"wa-lang.org/wa/internal/config"
-	"wa-lang.org/wazero"
-	"wa-lang.org/wazero/api"
 )
 
 func ArduinoInstantiate(ctx context.Context, rt wazero.Runtime) (api.Closer, error) {

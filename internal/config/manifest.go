@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/BurntSushi/toml"
+	"wa-lang.org/wa/internal/3rdparty/toml"
 )
 
 // 模块文件
@@ -32,6 +32,7 @@ type Manifest struct {
 type Manifest_package struct {
 	Name          string   `json:"name"`                    // 名字
 	Pkgpath       string   `json:"pkgpath"`                 // 模块的导入路径
+	Target        string   `json:"target"`                  // 目标平台
 	Version       string   `json:"version"`                 // 版本
 	Authors       []string `json:"authors,omitempty"`       // 作者
 	Description   string   `json:"description,omitempty"`   // 一句话简介
@@ -151,6 +152,9 @@ func isValidAppName(s string) bool {
 		return false
 	}
 	for _, c := range []rune(s) {
+		if c == '-' || c == '.' {
+			continue
+		}
 		if c == '_' || (c >= '0' && c <= '9') || unicode.IsLetter(c) {
 			continue
 		}
@@ -164,7 +168,7 @@ func isValidPkgpath(s string) bool {
 		return false
 	}
 	for _, c := range []rune(s) {
-		if c == '_' || c == '.' || c == '/' || (c >= '0' && c <= '9') {
+		if c == '-' || c == '_' || c == '.' || c == '/' || (c >= '0' && c <= '9') {
 			continue
 		}
 		if unicode.IsLetter(c) {

@@ -166,17 +166,30 @@ func (m *Module) GenValueType(from types.Type) ValueType {
 
 func IsNumber(v Value) bool {
 	switch v.Type().(type) {
-	case *tI8, *tU8, *tI16, *tU16, *tI32, *tU32, *tI64, *tU64, *tF32, *tF64, *tBool:
+	case *I8, *U8, *I16, *U16, *I32, *U32, *I64, *U64, *F32, *F64, *Bool:
 		return true
 	}
 
 	return false
 }
 
-func GetFnMangleName(v interface{}) (internal string, external string) {
+func GetFnMangleName(v interface{}, mainPkg string) (internal string, external string) {
+	exported := true
 	switch f := v.(type) {
 	case *ssa.Function:
-		if recv := f.Signature.Recv(); recv != nil {
+		recv := f.Signature.Recv()
+		if recv == nil && f.Anonymous() && f.Parent().Signature != nil {
+			recv = f.Parent().Signature.Recv()
+		}
+		if recv != nil {
+			//if recv.Pkg().Path() != mainPkg {
+			//	exported = false
+			//} else {
+			//	if f.Object() == nil || (!f.Object().Exported() && f.Object().Name() != "main") {
+			//		exported = false
+			//	}
+			//}
+			exported = false
 			internal, external = GetPkgMangleName(recv.Pkg().Path())
 
 			internal += "."
@@ -199,7 +212,16 @@ func GetFnMangleName(v interface{}) (internal string, external string) {
 			}
 		} else {
 			if f.Pkg != nil {
+				if f.Pkg.Pkg.Path() != mainPkg {
+					exported = false
+				} else {
+					if f.Object() == nil || (!f.Object().Exported() && f.Object().Name() != "main") {
+						exported = false
+					}
+				}
 				internal, external = GetPkgMangleName(f.Pkg.Pkg.Path())
+			} else {
+				exported = false
 			}
 		}
 		internal += "."
@@ -208,6 +230,9 @@ func GetFnMangleName(v interface{}) (internal string, external string) {
 		external += GenSymbolName(f.Name())
 
 	case *types.Func:
+		if f.Pkg().Path() != mainPkg {
+			exported = false
+		}
 		internal, external = GetPkgMangleName(f.Pkg().Path())
 		sig := f.Type().(*types.Signature)
 		if recv := sig.Recv(); recv != nil {
@@ -236,6 +261,9 @@ func GetFnMangleName(v interface{}) (internal string, external string) {
 		external += GenSymbolName(f.Name())
 	}
 
+	if !exported {
+		external = ""
+	}
 	return internal, external
 }
 

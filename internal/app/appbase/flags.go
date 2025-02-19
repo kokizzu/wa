@@ -22,8 +22,8 @@ func MakeFlag_output() *cli.StringFlag {
 func MakeFlag_target() *cli.StringFlag {
 	return &cli.StringFlag{
 		Name:  "target",
-		Usage: fmt.Sprintf("set target os (%s)", strings.Join(config.WaOS_List, "|")),
-		Value: config.WaOS_Default,
+		Usage: fmt.Sprintf("set target type (%s)", strings.Join(config.WaOS_List, "|")),
+		Value: "",
 	}
 }
 
@@ -46,5 +46,12 @@ func MakeFlag_ld_max_memory() *cli.IntFlag {
 	return &cli.IntFlag{
 		Name:  "ld-max-memory",
 		Usage: "set max memory size",
+	}
+}
+
+func MakeFlag_optimize() *cli.BoolFlag {
+	return &cli.BoolFlag{
+		Name:  "optimize",
+		Usage: "enable optimize flag",
 	}
 }

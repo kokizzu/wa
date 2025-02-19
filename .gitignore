@@ -1,3 +1,5 @@
+_output
+
 /.fleet
 /.vscode
 /_build*
@@ -5,16 +7,12 @@
 
 wa
 wa.exe
-wat2wasm
-wat2wasm.exe
 
 *.exe
 *.dll
 *.a
 *.so
 *.dylib
-*.ll
-*.s
 *.out*
 *.wasm
 *.wasm.*
@@ -23,3 +21,5 @@ y.wa.*
 /docs/snake/*
 
 _target
+
+__debug_bin*

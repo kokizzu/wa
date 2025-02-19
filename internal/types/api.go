@@ -23,7 +23,6 @@
 // Use Info.Types[expr].Type for the results of type inference.
 //
 // For a tutorial, see https://golang.org/s/types-tutorial.
-//
 package types
 
 import (
@@ -97,15 +96,6 @@ type Config struct {
 	// type-checked.
 	IgnoreFuncBodies bool
 
-	// If FakeImportC is set, `import "C"` (for packages requiring Cgo)
-	// declares an empty "C" package and errors are omitted for qualified
-	// identifiers referring to package C (which won't find an object).
-	// This feature is intended for the standard library cmd/api tool.
-	//
-	// Caution: Effects may be unpredictable due to follow-on errors.
-	//          Do not use casually!
-	FakeImportC bool
-
 	// If Error != nil, it is called with each error found
 	// during type checking; err has dynamic type Error.
 	// Secondary errors (for instance, to enumerate all types
@@ -130,6 +120,8 @@ type Config struct {
 	// If DisableUnusedImportCheck is set, packages are not checked
 	// for unused imports.
 	DisableUnusedImportCheck bool
+
+	DisableGeneric bool
 }
 
 // Info holds result type information for a type-checked package.
@@ -224,7 +216,6 @@ type Info struct {
 
 // TypeOf returns the type of expression e, or nil if not found.
 // Precondition: the Types, Uses and Defs maps are populated.
-//
 func (info *Info) TypeOf(e ast.Expr) Type {
 	if t, ok := info.Types[e]; ok {
 		return t.Type
@@ -244,7 +235,6 @@ func (info *Info) TypeOf(e ast.Expr) Type {
 // it defines, not the type (*TypeName) it uses.
 //
 // Precondition: the Uses and Defs maps are populated.
-//
 func (info *Info) ObjectOf(id *ast.Ident) Object {
 	if obj := info.Defs[id]; obj != nil {
 		return obj

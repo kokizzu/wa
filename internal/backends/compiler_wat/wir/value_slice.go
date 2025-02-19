@@ -53,7 +53,7 @@ func (m *Module) GenValueType_Slice(base ValueType, name string) *Slice {
 func (t *Slice) Size() int            { return t.underlying.Size() }
 func (t *Slice) align() int           { return t.underlying.align() }
 func (t *Slice) Kind() TypeKind       { return kSlice }
-func (t *Slice) onFree() int          { return t.underlying.onFree() }
+func (t *Slice) OnFree() int          { return t.underlying.OnFree() }
 func (t *Slice) Raw() []wat.ValueType { return t.underlying.Raw() }
 func (t *Slice) Equal(u ValueType) bool {
 	if ut, ok := u.(*Slice); ok {
@@ -66,12 +66,16 @@ func (t *Slice) EmitLoadFromAddr(addr Value, offset int) []wat.Inst {
 	return t.underlying.EmitLoadFromAddr(addr, offset)
 }
 
+func (t *Slice) EmitLoadFromAddrNoRetain(addr Value, offset int) []wat.Inst {
+	return t.underlying.EmitLoadFromAddrNoRetain(addr, offset)
+}
+
 /*这个函数极其不优雅*/
 func (t *Slice) emitGenFromRefOfSlice(x *aRef, low, high, max Value) (insts []wat.Inst) {
 	//block
 	insts = append(insts, x.ExtractByName("d").EmitPush()...)
 	insts = append(insts, wat.NewInstLoad(wat.U32{}, 0, 1))
-	insts = append(insts, wat.NewInstCall("$Retain"))
+	insts = append(insts, wat.NewInstCall("runtime.Block.Retain"))
 
 	//data
 	if low == nil {
@@ -151,7 +155,7 @@ func (t *Slice) emitGenMake(Len, Cap Value) (insts []wat.Inst) {
 	insts = append(insts, t._base_block.emitHeapAlloc(Cap)...)
 
 	//data
-	insts = append(insts, wat.NewInstCall("$wa.runtime.DupI32"))
+	insts = append(insts, wat.NewInstCall("runtime.DupI32"))
 	insts = append(insts, NewConst("16", t._u32).EmitPush()...)
 	insts = append(insts, wat.NewInstAdd(wat.U32{}))
 
@@ -283,10 +287,10 @@ func (t *Slice) genAppendFunc(m *Module) string {
 		if_false = append(if_false, new_cap.EmitPop()...)
 		if_false = append(if_false, t._base_block.emitHeapAlloc(new_cap)...) //block
 
-		if_false = append(if_false, wat.NewInstCall("$wa.runtime.DupI32"))
+		if_false = append(if_false, wat.NewInstCall("runtime.DupI32"))
 		if_false = append(if_false, NewConst("16", t._u32).EmitPush()...)
 		if_false = append(if_false, wat.NewInstAdd(wat.U32{})) //data
-		if_false = append(if_false, wat.NewInstCall("$wa.runtime.DupI32"))
+		if_false = append(if_false, wat.NewInstCall("runtime.DupI32"))
 		if_false = append(if_false, dest.EmitPop()...)     //dest
 		if_false = append(if_false, new_len.EmitPush()...) //len
 		if_false = append(if_false, new_cap.EmitPush()...) //cap
@@ -515,10 +519,6 @@ func newValue_Slice(name string, kind ValueKind, typ *Slice) *aSlice {
 
 func (v *aSlice) Type() ValueType { return v.typ }
 
-func (v *aSlice) emitStoreToAddr(addr Value, offset int) []wat.Inst {
-	return v.aStruct.emitStoreToAddr(addr, offset)
-}
-
 func (v *aSlice) emitSub(low, high, max Value) (insts []wat.Inst) {
 	//block
 	insts = append(insts, v.ExtractByName("b").EmitPush()...)
@@ -568,4 +568,52 @@ func (v *aSlice) emitEq(r Value) ([]wat.Inst, bool) {
 	}
 
 	return v.ExtractByName("d").emitEq(r_s.ExtractByName("d"))
+}
+
+func (v *aSlice) emitCompare(r Value) (insts []wat.Inst) {
+	if !r.Type().Equal(r.Type()) {
+		logger.Fatal("v.Type() != r.Type()")
+	}
+
+	t := r.(*aSlice)
+
+	insts = append(insts, v.ExtractByName("d").EmitPushNoRetain()...)
+	insts = append(insts, t.ExtractByName("d").EmitPushNoRetain()...)
+	insts = append(insts, wat.NewInstLt(toWatType(v.ExtractByName("d").Type())))
+
+	instDLe := wat.NewInstIf(nil, nil, []wat.ValueType{wat.I32{}})
+
+	instDLe.True = append(instDLe.True, wat.NewInstConst(wat.I32{}, "-1"))
+
+	instDLe.False = append(instDLe.False, v.ExtractByName("d").EmitPushNoRetain()...)
+	instDLe.False = append(instDLe.False, t.ExtractByName("d").EmitPushNoRetain()...)
+	instDLe.False = append(instDLe.False, wat.NewInstGt(toWatType(v.ExtractByName("d").Type())))
+
+	instLLe := wat.NewInstIf(nil, nil, []wat.ValueType{wat.I32{}})
+	instLLe.True = append(instLLe.True, wat.NewInstConst(wat.I32{}, "1"))
+	instLLe.False = v.ExtractByName("l").emitCompare(t.ExtractByName("l"))
+
+	instDLe.False = append(instDLe.False, instLLe)
+
+	insts = append(insts, instDLe)
+
+	return
+}
+
+func (v *aSlice) emitConvertToBytes() (insts []wat.Inst) {
+	// block:
+	insts = append(insts, v.ExtractByName("b").EmitPush()...)
+
+	// data:
+	insts = append(insts, v.ExtractByName("d").EmitPush()...)
+
+	// len:
+	insts = append(insts, v.ExtractByName("l").EmitPush()...)
+	insts = append(insts, wat.NewInstConst(wat.U32{}, strconv.Itoa(v.typ.Base.Size())))
+	insts = append(insts, wat.NewInstMul(wat.U32{}))
+
+	// cap:
+	insts = append(insts, wat.NewInstCall("runtime.DupI32"))
+
+	return
 }

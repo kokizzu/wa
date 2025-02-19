@@ -322,6 +322,7 @@ type Function struct {
 	namedResults []*Alloc                // tuple of named results
 	targets      *targets                // linked stack of branch targets
 	lblocks      map[*ast.Object]*lblock // labelled blocks
+	anonymous    bool                    // true if this function is anonymous
 }
 
 // BasicBlock represents an SSA basic block.
@@ -1356,6 +1357,24 @@ func (v *Global) ExportName() string {
 	return info.ExportName
 }
 
+// 返回强制寄存器，默认为false
+func (v *Global) ForceRegister() bool {
+	if v.commentInfo != nil {
+		return v.commentInfo.ForceRegister
+	}
+	if v.Object() == nil {
+		v.commentInfo = new(astutil.CommentInfo)
+		return v.commentInfo.ForceRegister
+	}
+
+	doc := v.Object().NodeDoc()
+	info := astutil.ParseCommentInfo(doc)
+
+	v.commentInfo = &info
+	return info.ForceRegister
+}
+
+func (v *Function) Anonymous() bool { return v.anonymous }
 func (v *Function) Name() string         { return v.name }
 func (v *Function) Type() types.Type     { return v.Signature }
 func (v *Function) Pos() token.Pos       { return v.pos }

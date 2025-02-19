@@ -12,13 +12,26 @@ var currentModule *Module
 Function:
 **************************************/
 type Function struct {
-	InternalName string
-	ExternalName string
-	Results      []ValueType
-	Params       []Value
-	Locals       []Value
+	InternalName     string
+	ExternalName     string
+	ExportName       string // add by chai, 临时添加, 用于 fix export name 的 js 名字问题
+	ExplicitExported bool
+	Results          []ValueType
+	Params           []Value
+	Locals           []Value
 
 	Insts []wat.Inst
+}
+
+/**************************************
+Global:
+**************************************/
+type Global struct {
+	Name     string
+	Name_exp string
+	val      Value
+	Type     ValueType
+	init_val Value
 }
 
 type ValueKind uint8
@@ -47,6 +60,7 @@ type Value interface {
 	Bin() []byte
 
 	emitEq(r Value) ([]wat.Inst, bool)
+	emitCompare(r Value) []wat.Inst
 }
 
 /**************************************
@@ -57,10 +71,11 @@ type ValueType interface {
 	Size() int
 	align() int
 	Kind() TypeKind
-	onFree() int
+	OnFree() int
 	Raw() []wat.ValueType
 	Equal(ValueType) bool
 	EmitLoadFromAddr(addr Value, offset int) []wat.Inst
+	EmitLoadFromAddrNoRetain(addr Value, offset int) []wat.Inst
 
 	Hash() int
 	SetHash(h int)

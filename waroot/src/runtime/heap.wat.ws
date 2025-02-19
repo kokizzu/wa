@@ -1,35 +1,43 @@
 ;; Copyright 2023 The Wa Authors. All rights reserved.
 
-(func $$waGetStackPtr (result i32)
-	(global.get $__stack_ptr)
+(func $runtime.throw
+	unreachable
 )
 
-(func $$waSetStackPtr (param $sp i32)
+(func $runtime.getStackPtr (result i32)
+	global.get $__stack_ptr
+)
+
+(func $runtime.setStackPtr (param $sp i32)
 	local.get $sp
 	global.set $__stack_ptr
 )
 
-(func $$waStackAlloc (param $size i32) (result i32)
+(func $runtime.stackAlloc (param $size i32) (result i32)
 	;; $__stack_ptr -= $size
-	(global.set $__stack_ptr (i32.sub (global.get $__stack_ptr) (local.get  $size)))
+	global.get $__stack_ptr
+	local.get  $size
+	i32.sub 
+	global.set $__stack_ptr 
+
 	;; return $__stack_ptr
-	(return (global.get $__stack_ptr))
+	global.get $__stack_ptr
+	return
 )
 
-(func $$waStackFree (param $size i32)
+(func $runtime.stackFree (param $size i32)
 	;; $__stack_ptr += $size
-	(global.set $__stack_ptr (i32.add (global.get $__stack_ptr) (local.get $size)))
+	global.get $__stack_ptr
+	local.get $size
+	i32.add
+	global.set $__stack_ptr 
 )
 
-(func $$waHeapBase(result i32)
+(func $runtime.heapBase(result i32)
 	global.get $__heap_base
 )
 
-(func $$waHeapMax(result i32)
-	global.get $__heap_max
-)
-
-(func $$waHeapAlloc (export "$runtime.waHeapAlloc") (param $nbytes i32) (result i32) ;;result = ptr
+(func $runtime.HeapAlloc (export "runtime.HeapAlloc") (param $nbytes i32) (result i32) ;;result = ptr
 	(local $ptr i32)
 
 	local.get $nbytes
@@ -72,12 +80,12 @@
 	local.get $ptr
 )
 
-(func $$waHeapFree (export "$runtime.waHeapFree") (param $ptr i32)
+(func $runtime.HeapFree (export "runtime.HeapFree") (param $ptr i32)
 	local.get $ptr
 	call $runtime.free
 )
 
-(func $$wa.runtime.Block.Init (param $ptr i32) (param $item_count i32) (param $release_func i32) (param $item_size i32) (result i32) ;;result = ptr
+(func $runtime.Block.Init (param $ptr i32) (param $item_count i32) (param $release_func i32) (param $item_size i32) (result i32) ;;result = ptr
 	local.get $ptr
 
 	local.get $ptr
@@ -100,17 +108,40 @@
 	end
 )
 
-(func $$wa.runtime.DupI32 (param i32) (result i32 i32) ;;r0 = r1 = p0
-	local.get 0
-	local.get 0
+(func $runtime.Block.SetFinalizer (param $ptr i32) (param $release_func i32)
+	local.get $ptr
+	if
+		local.get $ptr
+		local.get $release_func
+		i32.store offset=8 align=1
+	end
 )
 
-(func $$wa.runtime.SwapI32 (param i32 i32) (result i32 i32) ;;r0 = p1, r1 = p0
-	local.get 1
-	local.get 0
+(func $runtime.Block.HeapAlloc (export "runtime.Block.HeapAlloc") (param $item_count i32) (param $release_func i32) (param $item_size i32) (result i32) ;;result = ptr_block
+  local.get $item_count
+  local.get $item_size
+  i32.mul
+  i32.const 16
+  i32.add
+  call $runtime.HeapAlloc
+
+  local.get $item_count
+  local.get $release_func
+  local.get $item_size
+  call $runtime.Block.Init
 )
 
-(func $$Retain (param $ptr i32) (result i32) ;;result = ptr
+(func $runtime.DupI32 (param $a i32) (result i32 i32) ;;r0 = r1 = p0
+	local.get $a
+	local.get $a
+)
+
+(func $runtime.SwapI32 (param $a i32) (param $b i32) (result i32 i32) ;;r0 = p1, r1 = p0
+	local.get $b
+	local.get $a
+)
+
+(func $runtime.Block.Retain (export "runtime.Block.Retain") (param $ptr i32) (result i32) ;;result = ptr
 	local.get $ptr
 
 	local.get $ptr
@@ -124,7 +155,7 @@
 	end
 )
 
-(func $$Release (export "$runtime.Release") (param $ptr i32)
+(func $runtime.Block.Release (export "runtime.Block.Release") (param $ptr i32)
 	(local $ref_count i32)
 	(local $item_count i32)
 	(local $free_func i32)
@@ -173,10 +204,10 @@
 				local.set $data_ptr
 
 				loop $free_next
-					;; onFree(data_ptr)
+					;; OnFree(data_ptr)
 					local.get $data_ptr
 					local.get $free_func
-					call_indirect (type $$onFree)
+					call_indirect (type $$OnFree)
 
 					;; item_count--
 					local.get $item_count
@@ -199,7 +230,7 @@
 		end  ;;free_func != 0
 
 		local.get $ptr
-		call $$waHeapFree
+		call $runtime.HeapFree
 	end  ;;ref_count == 0
 )
 
@@ -213,14 +244,4 @@
 
 (func $$wa.runtime.slice_to_ptr (param $b i32) (param $d i32) (param $l i32) (param $c i32) (result i32) ;;result = ptr
 	local.get $d
-)
-
-(func $$wa.runtime.string_to_ptr (param $b i32) (param $d i32) (param $l i32) (result i32) ;;result = ptr
-	local.get $d
-)
-
-(func $$wa.runtime.string_to_iter (param $b i32) (param $d i32) (param $l i32) (result i32 i32 i32)
-	local.get $d
-	local.get $l
-	i32.const 0
 )

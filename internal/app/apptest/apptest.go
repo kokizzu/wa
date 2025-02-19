@@ -15,9 +15,9 @@ import (
 	"wa-lang.org/wa/internal/backends/compiler_wat"
 	"wa-lang.org/wa/internal/config"
 	"wa-lang.org/wa/internal/loader"
-	"wa-lang.org/wa/internal/wabt"
+	"wa-lang.org/wa/internal/wat/watutil"
 	"wa-lang.org/wa/internal/wazero"
-	"wa-lang.org/wa/waroot"
+	"wa-lang.org/wa/waroot/src"
 )
 
 var CmdTest = &cli.Command{
@@ -54,7 +54,7 @@ var CmdTest = &cli.Command{
 func RunTest(cfg *config.Config, pkgpath, runPattern string, appArgs ...string) {
 	var pkgList = []string{pkgpath}
 	if pkgpath == "std" {
-		pkgList = waroot.GetStdPkgTestList()
+		pkgList = src.GetStdTestPkgList()
 	}
 	for _, p := range pkgList {
 		runTest(cfg, p, runPattern, appArgs...)
@@ -80,7 +80,7 @@ func runTest(cfg *config.Config, pkgpath, runPattern string, appArgs ...string) 
 	}
 
 	// 生成 wat 文件(main 函数为空)
-	watOutput, err := compiler_wat.New().Compile(prog, "")
+	watOutput, err := compiler_wat.New().Compile(prog)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -90,13 +90,13 @@ func runTest(cfg *config.Config, pkgpath, runPattern string, appArgs ...string) 
 	os.WriteFile("a.out.wat", []byte(watOutput), 0666)
 
 	// 编译为 wasm
-	wasmBytes, err := wabt.Wat2Wasm([]byte(watOutput))
+	wasmBytes, err := watutil.Wat2Wasm("a.out.wat", []byte(watOutput))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	m, err := wazero.BuildModule(cfg, wasmName, wasmBytes, wasmArgs...)
+	m, err := wazero.BuildModule(wasmName, wasmBytes, wasmArgs...)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -147,7 +147,7 @@ func runTest(cfg *config.Config, pkgpath, runPattern string, appArgs ...string) 
 
 			// 重新加载
 			{
-				m, err = wazero.BuildModule(cfg, wasmName, wasmBytes, wasmArgs...)
+				m, err = wazero.BuildModule(wasmName, wasmBytes, wasmArgs...)
 				if err != nil {
 					fmt.Println(err)
 					os.Exit(1)
@@ -253,7 +253,7 @@ func runTest(cfg *config.Config, pkgpath, runPattern string, appArgs ...string) 
 
 			// 重新加载
 			{
-				m, err = wazero.BuildModule(cfg, wasmName, wasmBytes, wasmArgs...)
+				m, err = wazero.BuildModule(wasmName, wasmBytes, wasmArgs...)
 				if err != nil {
 					fmt.Println(err)
 					os.Exit(1)
