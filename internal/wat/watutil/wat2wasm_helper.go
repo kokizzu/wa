@@ -82,7 +82,7 @@ func (p *wat2wasmWorker) findTableIndex(ident string) wasm.Index {
 	var importCount int
 	for _, x := range p.mWat.Imports {
 		if x.ObjKind == token.TABLE {
-			if x.TableName == ident {
+			if x.Table.Name == ident {
 				return wasm.Index(importCount)
 			}
 			importCount++
@@ -202,7 +202,7 @@ func (p *wat2wasmWorker) encodeFloat64(i float64) []byte {
 	binary.LittleEndian.PutUint64(b, math.Float64bits(i))
 	return b
 }
-func (p *wat2wasmWorker) encodeAlign(align uint) byte {
+func (p *wat2wasmWorker) encodeAlign(align uint32) byte {
 	switch align {
 	case 1:
 		return 0
