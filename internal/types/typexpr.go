@@ -70,25 +70,25 @@ func (check *Checker) ident(x *operand, e *ast.Ident, def *Named, wantType bool)
 			return
 		}
 		switch obj {
-		case universeIota:
+		case check._universeIota():
 			if check.iota == nil {
 				check.errorf(e.Pos(), "cannot use iota outside constant declaration")
 				return
 			}
 			x.val = check.iota
 
-		case universe__PACKAGE__:
+		case check._universe__PACKAGE__():
 			x.val = constant.MakeString(check.pkg.path)
-		case universe__FILE__:
+		case check._universe__FILE__():
 			pos := check.fset.Position(e.Pos())
 			x.val = constant.MakeString(pos.Filename)
-		case universe__LINE__:
+		case check._universe__LINE__():
 			pos := check.fset.Position(e.Pos())
 			x.val = constant.MakeInt64(int64(pos.Line))
-		case universe__COLUMN__:
+		case check._universe__COLUMN__():
 			pos := check.fset.Position(e.Pos())
 			x.val = constant.MakeInt64(int64(pos.Column))
-		case universe__FUNC__:
+		case check._universe__FUNC__():
 			if check.sig == nil {
 				check.errorf(e.Pos(), "cannot use __FUNC__ outside func or method declaration")
 				return
@@ -107,7 +107,7 @@ func (check *Checker) ident(x *operand, e *ast.Ident, def *Named, wantType bool)
 				funcName := check.decl.fdecl.Name.Name
 				x.val = constant.MakeString(funcName)
 			}
-		case universe__POS__:
+		case check._universe__POS__():
 			x.val = constant.MakeInt64(int64(e.Pos()))
 
 		default:

@@ -56,7 +56,11 @@ func (check *Checker) call(x *operand, e *ast.CallExpr) exprKind {
 		if x.mode != invalid && x.mode != constant_ {
 			check.hasCallOrRecv = true
 		}
-		return predeclaredFuncs[id].kind
+		if check.pkg.W2Mode {
+			return wzPredeclaredFuncs[id].kind
+		} else {
+			return waPredeclaredFuncs[id].kind
+		}
 
 	default:
 		// function/method call

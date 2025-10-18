@@ -96,7 +96,8 @@ func (p *_Loader) loadProgram(vfs *config.PkgVFS, manifest *config.Manifest) (*P
 
 	// 注册 assert 函数
 	if p.cfg.UnitTest {
-		types.DefPredeclaredTestFuncs()
+		types.WaDefPredeclaredTestFuncs()
+		types.WzDefPredeclaredTestFuncs()
 	}
 
 	p.vfs = *vfs
@@ -124,7 +125,10 @@ func (p *_Loader) loadProgram(vfs *config.PkgVFS, manifest *config.Manifest) (*P
 		}
 
 		// 注册 runtime.SetFinalizer 等内置函数
-		types.DefPredeclaredRuntimeFuncs(runtimePkg)
+		types.WaDefPredeclaredRuntimeFuncs(runtimePkg)
+
+		// TODO: 中文路径名需要定义
+		//types.WzDefPredeclaredRuntimeFuncs(runtimePkg)
 	}
 
 	// import "main"
@@ -186,8 +190,12 @@ func (p *_Loader) Import(pkgpath string) (*types.Package, error) {
 	var pkg Package
 	var filenames []string
 
-	if pkgpath == "unsafe" || pkgpath == token.K_太初 {
-		pkg.Pkg = types.Unsafe
+	if pkgpath == token.K_unsafe || pkgpath == token.K_洪荒 {
+		if pkgpath == token.K_unsafe {
+			pkg.Pkg = types.WaUnsafe
+		} else {
+			pkg.Pkg = types.WzUnsafe
+		}
 		pkg.Info = &types.Info{
 			Types:      make(map[ast.Expr]types.TypeAndValue),
 			Defs:       make(map[*ast.Ident]types.Object),

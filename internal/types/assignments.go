@@ -41,7 +41,7 @@ func (check *Checker) assignment(x *operand, T Type, context string) {
 				x.mode = invalid
 				return
 			}
-			target = Default(x.typ)
+			target = Default(x.typ, check.pkg.W2Mode)
 		}
 		check.convertUntyped(x, target)
 		if x.mode == invalid {
@@ -116,7 +116,7 @@ func (check *Checker) initVar(lhs *Var, x *operand, context string) Type {
 				lhs.typ = Typ[Invalid]
 				return nil
 			}
-			typ = Default(typ)
+			typ = Default(typ, check.pkg.W2Mode)
 		}
 		lhs.typ = typ
 	}

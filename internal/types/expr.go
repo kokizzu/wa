@@ -456,7 +456,7 @@ func (check *Checker) updateExprType(x ast.Expr, typ Type, final bool) {
 	}
 	if old.val != nil {
 		// If x is a constant, it must be representable as a value of typ.
-		c := operand{old.mode, x, old.typ, old.val, 0}
+		c := operand{check.pkg.W2Mode, old.mode, x, old.typ, old.val, 0}
 		check.convertUntyped(&c, typ)
 		if c.mode == invalid {
 			return
@@ -553,7 +553,7 @@ func (check *Checker) convertUntyped(x *operand, target Type) {
 			if !t.Empty() {
 				goto Error
 			}
-			target = Default(x.typ)
+			target = Default(x.typ, check.pkg.W2Mode)
 		}
 	case *Pointer, *Signature, *Slice, *Map:
 		if !x.isNil() {
@@ -623,8 +623,8 @@ func (check *Checker) comparison(x, y *operand, op token.Token) {
 		// time will be materialized. Update the expression trees.
 		// If the current types are untyped, the materialized type
 		// is the respective default type.
-		check.updateExprType(x.expr, Default(x.typ), true)
-		check.updateExprType(y.expr, Default(y.typ), true)
+		check.updateExprType(x.expr, Default(x.typ, check.pkg.W2Mode), true)
+		check.updateExprType(y.expr, Default(y.typ, check.pkg.W2Mode), true)
 	}
 
 	// x <=> y, 返回 -1/0/1
@@ -1296,7 +1296,7 @@ func (check *Checker) exprInternal(x *operand, e ast.Expr, hint Type) exprKind {
 				// (not a constant) even if the string and the
 				// index are constant
 				x.mode = value
-				x.typ = universeByte // use 'byte' name
+				x.typ = check._universeByte() // use 'byte' name
 			}
 
 		case *Array:

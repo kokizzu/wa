@@ -46,18 +46,17 @@ var operandModeString = [...]string{
 // the operand, the operand's type, a value for constants, and an id
 // for built-in functions.
 // The zero value of operand is a ready to use invalid operand.
-//
 type operand struct {
-	mode operandMode
-	expr ast.Expr
-	typ  Type
-	val  constant.Value
-	id   builtinId
+	W2Mode bool
+	mode   operandMode
+	expr   ast.Expr
+	typ    Type
+	val    constant.Value
+	id     builtinId
 }
 
 // pos returns the position of the expression corresponding to x.
 // If x is invalid the position is token.NoPos.
-//
 func (x *operand) pos() token.Pos {
 	// x.expr may not be set if x is invalid
 	if x.expr == nil {
@@ -93,8 +92,7 @@ func (x *operand) pos() token.Pos {
 //
 // commaok    <expr> (<untyped kind> <mode>                    )
 // commaok    <expr> (               <mode>       of type <typ>)
-//
-func operandString(x *operand, qf Qualifier) string {
+func operandString(x *operand, qf Qualifier, wzMode bool) string {
 	var buf bytes.Buffer
 
 	var expr string
@@ -103,7 +101,11 @@ func operandString(x *operand, qf Qualifier) string {
 	} else {
 		switch x.mode {
 		case builtin:
-			expr = predeclaredFuncs[x.id].name
+			if wzMode {
+				expr = wzPredeclaredFuncs[x.id].name
+			} else {
+				expr = waPredeclaredFuncs[x.id].name
+			}
 		case typexpr:
 			expr = TypeString(x.typ, qf)
 		case constant_:
@@ -164,7 +166,7 @@ func operandString(x *operand, qf Qualifier) string {
 }
 
 func (x *operand) String() string {
-	return operandString(x, nil)
+	return operandString(x, nil, x.W2Mode)
 }
 
 // setConst sets x to the untyped constant for literal lit.

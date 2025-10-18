@@ -56,7 +56,7 @@ func (check *Checker) conversion(x *operand, T Type) {
 		// - For integer to string conversions, keep the argument type.
 		//   (See also the TODO below.)
 		if IsInterface(T) || constArg && !isConstType(T) {
-			final = Default(x.typ)
+			final = Default(x.typ, check.pkg.W2Mode)
 		} else if isInteger(x.typ) && isString(T) {
 			final = x.typ
 		}

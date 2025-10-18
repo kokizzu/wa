@@ -717,7 +717,7 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 			case *Basic:
 				if isString(typ) {
 					key = Typ[Int]
-					val = universeRune // use 'rune' name
+					val = check._universeRune() // use 'rune' name
 				}
 				// 基于数值类型的迭代
 				if _UseFeature_forRangeIter {

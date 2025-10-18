@@ -279,7 +279,7 @@ func (obj *TypeName) IsAlias() bool {
 		return false
 	case *Basic:
 		// unsafe.Pointer is not an alias.
-		if obj.pkg == Unsafe {
+		if obj.pkg == WaUnsafe || obj.pkg == WzUnsafe {
 			return false
 		}
 		// Any user-defined type name for a basic type is an alias for a
@@ -288,7 +288,7 @@ func (obj *TypeName) IsAlias() bool {
 		// a different name than the name of the basic type it refers to.
 		// Additionally, we need to look for "byte" and "rune" because they
 		// are aliases but have the same names (for better error messages).
-		return obj.pkg != nil || t.name != obj.name || t == universeByte || t == universeRune
+		return obj.pkg != nil || t.name != obj.name || t == waUniverseByte || t == waUniverseRune || t == wzUniverseByte || t == wzUniverseRune
 	case *Named:
 		return obj != t.obj
 	default:
@@ -418,8 +418,12 @@ type Builtin struct {
 	id builtinId
 }
 
-func newBuiltin(id builtinId) *Builtin {
-	return &Builtin{object{name: predeclaredFuncs[id].name, typ: Typ[Invalid], color_: black}, id}
+func newBuiltin(id builtinId, wzMode bool) *Builtin {
+	if wzMode {
+		return &Builtin{object{name: wzPredeclaredFuncs[id].name, typ: Typ[Invalid], color_: black}, id}
+	} else {
+		return &Builtin{object{name: waPredeclaredFuncs[id].name, typ: Typ[Invalid], color_: black}, id}
+	}
 }
 
 // Nil represents the predeclared value nil.

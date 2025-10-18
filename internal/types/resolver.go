@@ -214,7 +214,7 @@ func (check *Checker) importPackage(pos token.Pos, path, dir string) *Package {
 				if i := strings.LastIndex(name, "/"); i >= 0 {
 					name = name[i+1:]
 				}
-				imp = NewPackage(path, name)
+				imp = NewPackage(path, name, check.pkg.W2Mode)
 			}
 			// continue to use the package as best as we can
 			imp.fake = true // avoid follow-up lookup failures
